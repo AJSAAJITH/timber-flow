@@ -1,13 +1,185 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
+// This is your complete Prisma Schema (prisma/schema.prisma)
 
 generator client {
-  provider = "prisma-client"
-  output   = "../app/generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
+}
+
+// ==========================================
+// 1. ENUMS (System Constants)
+// ==========================================
+
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  CASHIER
+}
+
+enum PaymentMethod {
+  CASH
+  CREDIT // ණයට (Pay Later)
+  BANK_TRANSFER // බැංකු තැන්පතු
+}
+
+enum PaymentStatus {
+  PAID // සම්පූර්ණයෙන්ම ගෙවා ඇත
+  PENDING // කිසිවක් ගෙවා නැත (සම්පූර්ණ ණය)
+  PARTIALLY_PAID // බාගයක් ගෙවා ඇත
+}
+
+// ==========================================
+// 2. CORE MODELS
+// ==========================================
+
+// ශාඛා කළමනාකරණය (Multi-Branch)
+model Branch {
+  id       String  @id @default(cuid())
+  name     String // e.g., "Main Shop", "Galle Branch"
+  location String?
+
+  users     User[]
+  inventory BranchInventory[]
+  sales     Sale[]
+  expenses  Expense[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// පරිශීලකයන් (Clerk Auth සමඟ සම්බන්ධ වේ)
+model User {
+  id      String @id @default(cuid())
+  clerkId String @unique // Clerk User ID එක
+  name    String
+  role    Role   @default(CASHIER)
+
+  branchId String? // Super Admin ට branch එකක් අත්‍යවශ්‍ය නැත, අනෙක් අයට අනිවාර්යයි
+  branch   Branch? @relation(fields: [branchId], references: [id])
+
+  sales    Sale[]
+  expenses Expense[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ==========================================
+// 3. PRODUCT & INVENTORY MODELS
+// ==========================================
+
+// නිෂ්පාදන කාණ්ඩ (Categories)
+model Category {
+  id       String    @id @default(cuid())
+  name     String // e.g., "Plywood Board", "Barrels", "Wooden Arts"
+  products Product[]
+}
+
+// නිෂ්පාදන (Products - Sizes/Volumes වෙන වෙනම Product එකක් ලෙස දමයි)
+model Product {
+  id   String  @id @default(cuid())
+  name String // e.g., "Plywood Board 3x3", "Plastic Barrel 50L"
+  sku  String? @unique // අභ්‍යන්තර කෝඩ් එකක් අවශ්‍ය නම්
+
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id])
+
+  unitPrice Float // සාමාන්‍ය විකුණුම් මිල
+
+  inventory BranchInventory[]
+  saleItems SaleItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ශාඛා අනුව තොග පාලනය (Branch Inventory)
+model BranchInventory {
+  id String @id @default(cuid())
+
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id])
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+
+  stockLevel Int @default(0) // දැනට තියෙන තොගය
+  minStock   Int @default(10) // Low stock alert එක පෙන්වීමට අවශ්‍ය අවම තොගය
+
+  @@unique([branchId, productId]) // එක ශාඛාවකට එක නිෂ්පාදනයකින් තිබිය හැක්කේ එක තොග වාර්තාවක් පමණි
+}
+
+// ==========================================
+// 4. CUSTOMER & CREDIT (ණය) MODELS
+// ==========================================
+
+// ගනුදෙනුකරුවන් (විශේෂයෙන් ණයට ගන්නා අය සඳහා)
+model Customer {
+  id       String  @id @default(cuid())
+  name     String // Customer ගේ නම
+  phone    String? // ණය එකතු කරගැනීමට කතා කිරීමට දුරකථන අංකය
+  totalDue Float   @default(0) // දැනට මුළු එකතු විය යුතු ණය මුදල
+
+  sales     Sale[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ==========================================
+// 5. SALES & FINANCE MODELS
+// ==========================================
+
+// විකුණුම් වාර්තා (Sales Transactions)
+model Sale {
+  id          String @id @default(cuid())
+  totalAmount Float // මුළු බිල්පතේ අගය
+  paidAmount  Float  @default(0) // පාරිභෝගිකයා දැනට ගෙවූ මුදල
+  dueAmount   Float  @default(0) // ඉතිරි මුදල (ණය මුදල)
+
+  paymentMethod PaymentMethod @default(CASH)
+  paymentStatus PaymentStatus @default(PAID)
+
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id])
+
+  userId String // බිල්පත දැමූ Cashier/Admin
+  user   User   @relation(fields: [userId], references: [id])
+
+  customerId String? // සාමාන්‍ය Cash sales වලට optional, Credit sales වලට අනිවාර්යයි
+  customer   Customer? @relation(fields: [customerId], references: [id])
+
+  items     SaleItem[]
+  createdAt DateTime   @default(now())
+}
+
+// බිල්පතක ඇති අයිතම (Sale Items)
+model SaleItem {
+  id String @id @default(cuid())
+
+  saleId String
+  sale   Sale   @relation(fields: [saleId], references: [id])
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+
+  quantity    Int // ප්‍රමාණය
+  priceAtSale Float // විකුණන අවස්ථාවේ පැවති මිල (මිල ගණන් වෙනස් වුවහොත් track කර ගැනීමට)
+}
+
+// වියදම් සහ අයිතිකරු සල්ලි ගැනීම (Expenses & Owner Withdrawals)
+model Expense {
+  id          String @id @default(cuid())
+  amount      Float
+  description String // e.g., "Shop Maintenance", "Owner Profit Withdrawal"
+  type        String @default("GENERAL") // "GENERAL" හෝ "PROFIT_WITHDRAWAL"
+
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id])
+
+  userId String // වියදම ඇතුලත් කළ පුද්ගලයා
+  user   User   @relation(fields: [userId], references: [id])
+
+  createdAt DateTime @default(now())
 }
