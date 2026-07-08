@@ -1,5 +1,3 @@
-// This is your complete Prisma Schema (prisma/schema.prisma)
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -20,47 +18,56 @@ enum Role {
 
 enum PaymentMethod {
   CASH
-  CREDIT // ණයට (Pay Later)
-  BANK_TRANSFER // බැංකු තැන්පතු
+  CREDIT
+  BANK_TRANSFER
 }
 
 enum PaymentStatus {
-  PAID // සම්පූර්ණයෙන්ම ගෙවා ඇත
-  PENDING // කිසිවක් ගෙවා නැත (සම්පූර්ණ ණය)
-  PARTIALLY_PAID // බාගයක් ගෙවා ඇත
+  PAID
+  PENDING
+  PARTIALLY_PAID
+}
+
+enum InventoryLogType {
+  STOCK_IN // අලුතෙන් තොග ඇතුලත් කිරීම්
+  SALE // විකිණීම නිසා අඩුවීම්
+  STOCK_TRANSFER // ශාඛා අතර තොග හුවමාරු
+  ADJUSTMENT // හානිවීම් හෝ වෙනත් සංශෝධන
 }
 
 // ==========================================
 // 2. CORE MODELS
 // ==========================================
 
-// ශාඛා කළමනාකරණය (Multi-Branch)
 model Branch {
   id       String  @id @default(cuid())
-  name     String // e.g., "Main Shop", "Galle Branch"
+  name     String
   location String?
 
-  users     User[]
-  inventory BranchInventory[]
-  sales     Sale[]
-  expenses  Expense[]
+  users         User[]
+  inventory     BranchInventory[]
+  sales         Sale[]
+  expenses      Expense[]
+  inventoryLogs InventoryLog[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
-// පරිශීලකයන් (Clerk Auth සමඟ සම්බන්ධ වේ)
 model User {
   id      String @id @default(cuid())
-  clerkId String @unique // Clerk User ID එක
+  clerkId String @unique
   name    String
+  email   String @unique
   role    Role   @default(CASHIER)
 
-  branchId String? // Super Admin ට branch එකක් අත්‍යවශ්‍ය නැත, අනෙක් අයට අනිවාර්යයි
+  branchId String?
   branch   Branch? @relation(fields: [branchId], references: [id])
 
-  sales    Sale[]
-  expenses Expense[]
+  sales          Sale[]
+  expenses       Expense[]
+  inventoryLogs  InventoryLog[]
+  creditPayments CreditPaymentLog[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -70,34 +77,50 @@ model User {
 // 3. PRODUCT & INVENTORY MODELS
 // ==========================================
 
-// නිෂ්පාදන කාණ්ඩ (Categories)
 model Category {
   id       String    @id @default(cuid())
-  name     String // e.g., "Plywood Board", "Barrels", "Wooden Arts"
+  name     String // e.g., "Teak Logs", "Mahogany Planks", "Plywood Boards"
   products Product[]
 }
 
-// නිෂ්පාදන (Products - Sizes/Volumes වෙන වෙනම Product එකක් ලෙස දමයි)
 model Product {
   id   String  @id @default(cuid())
-  name String // e.g., "Plywood Board 3x3", "Plastic Barrel 50L"
-  sku  String? @unique // අභ්‍යන්තර කෝඩ් එකක් අවශ්‍ය නම්
+  name String // e.g., "Teak Plank 2x4x10", "Plywood 3x3"
+  sku  String? @unique
 
   categoryId String
   category   Category @relation(fields: [categoryId], references: [id])
 
-  unitPrice Float // සාමාන්‍ය විකුණුම් මිල
+  unitPrice Float
 
-  inventory BranchInventory[]
-  saleItems SaleItem[]
+  inventory     BranchInventory[]
+  saleItems     SaleItem[]
+  inventoryLogs InventoryLog[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
-// ශාඛා අනුව තොග පාලනය (Branch Inventory)
 model BranchInventory {
-  id String @id @default(cuid())
+  id       String @id @default(cuid())
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id])
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+
+  stockLevel Int @default(0)
+  minStock   Int @default(10)
+
+  @@unique([branchId, productId])
+}
+
+// 💡 අලුත්: තොග වෙනස්වීම් හරියටම ට්‍රැක් කිරීමට
+model InventoryLog {
+  id       String           @id @default(cuid())
+  type     InventoryLogType
+  quantity Int // වෙනස් වූ ප්‍රමාණය (+ හෝ -)
+  note     String? // e.g., "Bulk purchase incoming"
 
   branchId String
   branch   Branch @relation(fields: [branchId], references: [id])
@@ -105,38 +128,54 @@ model BranchInventory {
   productId String
   product   Product @relation(fields: [productId], references: [id])
 
-  stockLevel Int @default(0) // දැනට තියෙන තොගය
-  minStock   Int @default(10) // Low stock alert එක පෙන්වීමට අවශ්‍ය අවම තොගය
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
 
-  @@unique([branchId, productId]) // එක ශාඛාවකට එක නිෂ්පාදනයකින් තිබිය හැක්කේ එක තොග වාර්තාවක් පමණි
+  createdAt DateTime @default(now())
 }
 
 // ==========================================
-// 4. CUSTOMER & CREDIT (ණය) MODELS
+// 4. CUSTOMER & CREDIT MODELS
 // ==========================================
 
-// ගනුදෙනුකරුවන් (විශේෂයෙන් ණයට ගන්නා අය සඳහා)
 model Customer {
   id       String  @id @default(cuid())
-  name     String // Customer ගේ නම
-  phone    String? // ණය එකතු කරගැනීමට කතා කිරීමට දුරකථන අංකය
-  totalDue Float   @default(0) // දැනට මුළු එකතු විය යුතු ණය මුදල
+  name     String
+  phone    String?
+  totalDue Float   @default(0)
 
-  sales     Sale[]
+  sales          Sale[]
+  creditPayments CreditPaymentLog[] // 💡 කස්ටමර් ණය පියවපු හිස්ට්‍රි එක
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// 💡 අලුත්: ණය පියවීම් ට්‍රැක් කරන ටේබල් එක
+model CreditPaymentLog {
+  id         String  @id @default(cuid())
+  amountPaid Float
+  note       String? // e.g., "Paid via bank transfer"
+
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id])
+
+  userId String // සල්ලි බාරගත්ත Cashier
+  user   User   @relation(fields: [userId], references: [id])
+
+  createdAt DateTime @default(now())
 }
 
 // ==========================================
 // 5. SALES & FINANCE MODELS
 // ==========================================
 
-// විකුණුම් වාර්තා (Sales Transactions)
 model Sale {
-  id          String @id @default(cuid())
-  totalAmount Float // මුළු බිල්පතේ අගය
-  paidAmount  Float  @default(0) // පාරිභෝගිකයා දැනට ගෙවූ මුදල
-  dueAmount   Float  @default(0) // ඉතිරි මුදල (ණය මුදල)
+  id            String  @id @default(cuid())
+  invoiceNumber String? @unique // e.g., INV-2026-0001
+  totalAmount   Float
+  paidAmount    Float   @default(0)
+  dueAmount     Float   @default(0)
 
   paymentMethod PaymentMethod @default(CASH)
   paymentStatus PaymentStatus @default(PAID)
@@ -144,41 +183,38 @@ model Sale {
   branchId String
   branch   Branch @relation(fields: [branchId], references: [id])
 
-  userId String // බිල්පත දැමූ Cashier/Admin
+  userId String
   user   User   @relation(fields: [userId], references: [id])
 
-  customerId String? // සාමාන්‍ය Cash sales වලට optional, Credit sales වලට අනිවාර්යයි
+  customerId String?
   customer   Customer? @relation(fields: [customerId], references: [id])
 
   items     SaleItem[]
   createdAt DateTime   @default(now())
 }
 
-// බිල්පතක ඇති අයිතම (Sale Items)
 model SaleItem {
-  id String @id @default(cuid())
-
+  id     String @id @default(cuid())
   saleId String
   sale   Sale   @relation(fields: [saleId], references: [id])
 
   productId String
   product   Product @relation(fields: [productId], references: [id])
 
-  quantity    Int // ප්‍රමාණය
-  priceAtSale Float // විකුණන අවස්ථාවේ පැවති මිල (මිල ගණන් වෙනස් වුවහොත් track කර ගැනීමට)
+  quantity    Int
+  priceAtSale Float
 }
 
-// වියදම් සහ අයිතිකරු සල්ලි ගැනීම (Expenses & Owner Withdrawals)
 model Expense {
   id          String @id @default(cuid())
   amount      Float
-  description String // e.g., "Shop Maintenance", "Owner Profit Withdrawal"
-  type        String @default("GENERAL") // "GENERAL" හෝ "PROFIT_WITHDRAWAL"
+  description String
+  type        String @default("GENERAL") // "GENERAL", "PROFIT_WITHDRAWAL", "SALARY"
 
   branchId String
   branch   Branch @relation(fields: [branchId], references: [id])
 
-  userId String // වියදම ඇතුලත් කළ පුද්ගලයා
+  userId String
   user   User   @relation(fields: [userId], references: [id])
 
   createdAt DateTime @default(now())
