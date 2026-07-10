@@ -29,10 +29,20 @@ enum PaymentStatus {
 }
 
 enum InventoryLogType {
-  STOCK_IN // අලුතෙන් තොග ඇතුලත් කිරීම්
-  SALE // විකිණීම නිසා අඩුවීම්
-  STOCK_TRANSFER // ශාඛා අතර තොග හුවමාරු
-  ADJUSTMENT // හානිවීම් හෝ වෙනත් සංශෝධන
+  STOCK_IN
+  STOCK_OUT
+  ADJUSTMENT
+  DAMAGE
+  RETURN
+}
+
+// 💡 වියදම් වර්ග වර්ගීකරණය කිරීමට Enum එකක් එකතු කලා
+enum ExpenseType {
+  GENERAL
+  PROFIT_WITHDRAWAL // 👈 කවුන්ටරයෙන් මුදල් ලබා ගැනීම් (Owner/Admin cashout)
+  SALARY
+  PETTY_CASH // එදිනෙදා සුළු වියදම් (කෑම, ප්‍රවාහන, ආදී)
+  BILL_PAYMENT // ලයිට් බිල්, වතුර බිල්, කුලී
 }
 
 // ==========================================
@@ -40,26 +50,29 @@ enum InventoryLogType {
 // ==========================================
 
 model Branch {
-  id       String  @id @default(cuid())
-  name     String
-  location String?
+  id        String  @id @default(cuid())
+  name      String
+  location  String?
+  isBlocked Boolean @default(false)
 
-  users         User[]
-  inventory     BranchInventory[]
-  sales         Sale[]
-  expenses      Expense[]
-  inventoryLogs InventoryLog[]
+  users          User[]
+  inventory      BranchInventory[]
+  sales          Sale[]
+  expenses       Expense[]
+  inventoryLogs  InventoryLog[]
+  creditPayments CreditPaymentLog[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
 model User {
-  id      String @id @default(cuid())
-  clerkId String @unique
-  name    String
-  email   String @unique
-  role    Role   @default(CASHIER)
+  id        String  @id @default(cuid())
+  clerkId   String  @unique
+  name      String
+  email     String  @unique
+  role      Role    @default(CASHIER)
+  isBlocked Boolean @default(false)
 
   branchId String?
   branch   Branch? @relation(fields: [branchId], references: [id])
@@ -79,19 +92,19 @@ model User {
 
 model Category {
   id       String    @id @default(cuid())
-  name     String // e.g., "Teak Logs", "Mahogany Planks", "Plywood Boards"
+  name     String
   products Product[]
 }
 
 model Product {
   id   String  @id @default(cuid())
-  name String // e.g., "Teak Plank 2x4x10", "Plywood 3x3"
+  name String
   sku  String? @unique
 
   categoryId String
   category   Category @relation(fields: [categoryId], references: [id])
 
-  unitPrice Float
+  unitPrice Decimal @db.Decimal(10, 2)
 
   inventory     BranchInventory[]
   saleItems     SaleItem[]
@@ -115,12 +128,11 @@ model BranchInventory {
   @@unique([branchId, productId])
 }
 
-// 💡 අලුත්: තොග වෙනස්වීම් හරියටම ට්‍රැක් කිරීමට
 model InventoryLog {
   id       String           @id @default(cuid())
   type     InventoryLogType
-  quantity Int // වෙනස් වූ ප්‍රමාණය (+ හෝ -)
-  note     String? // e.g., "Bulk purchase incoming"
+  quantity Int
+  note     String?
 
   branchId String
   branch   Branch @relation(fields: [branchId], references: [id])
@@ -142,25 +154,29 @@ model Customer {
   id       String  @id @default(cuid())
   name     String
   phone    String?
-  totalDue Float   @default(0)
+  nic      String? @unique
+  address  String?
+  totalDue Decimal @default(0) @db.Decimal(10, 2)
 
   sales          Sale[]
-  creditPayments CreditPaymentLog[] // 💡 කස්ටමර් ණය පියවපු හිස්ට්‍රි එක
+  creditPayments CreditPaymentLog[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
-// 💡 අලුත්: ණය පියවීම් ට්‍රැක් කරන ටේබල් එක
 model CreditPaymentLog {
   id         String  @id @default(cuid())
-  amountPaid Float
-  note       String? // e.g., "Paid via bank transfer"
+  amountPaid Decimal @db.Decimal(10, 2)
+  note       String?
 
   customerId String
   customer   Customer @relation(fields: [customerId], references: [id])
 
-  userId String // සල්ලි බාරගත්ත Cashier
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id])
+
+  userId String
   user   User   @relation(fields: [userId], references: [id])
 
   createdAt DateTime @default(now())
@@ -172,10 +188,10 @@ model CreditPaymentLog {
 
 model Sale {
   id            String  @id @default(cuid())
-  invoiceNumber String? @unique // e.g., INV-2026-0001
-  totalAmount   Float
-  paidAmount    Float   @default(0)
-  dueAmount     Float   @default(0)
+  invoiceNumber String? @unique
+  totalAmount   Decimal @db.Decimal(10, 2)
+  paidAmount    Decimal @default(0) @db.Decimal(10, 2)
+  dueAmount     Decimal @default(0) @db.Decimal(10, 2)
 
   paymentMethod PaymentMethod @default(CASH)
   paymentStatus PaymentStatus @default(PAID)
@@ -194,27 +210,26 @@ model Sale {
 }
 
 model SaleItem {
-  id     String @id @default(cuid())
-  saleId String
-  sale   Sale   @relation(fields: [saleId], references: [id])
-
-  productId String
-  product   Product @relation(fields: [productId], references: [id])
-
-  quantity    Int
-  priceAtSale Float
+  id            String  @id @default(cuid())
+  saleId        String
+  sale          Sale    @relation(fields: [saleId], references: [id])
+  productId     String
+  product       Product @relation(fields: [productId], references: [id])
+  quantity      Int
+  originalPrice Decimal @db.Decimal(10, 2)
+  priceAtSale   Decimal @db.Decimal(10, 2)
 }
 
 model Expense {
-  id          String @id @default(cuid())
-  amount      Float
-  description String
-  type        String @default("GENERAL") // "GENERAL", "PROFIT_WITHDRAWAL", "SALARY"
+  id          String      @id @default(cuid())
+  amount      Decimal     @db.Decimal(10, 2)
+  description String // 👈 සල්ලි ගත්තේ ඇයි කියන හේතුව (Reason)
+  type        ExpenseType @default(GENERAL) // 👈 String වෙනුවට Enum එක දැම්මා
 
   branchId String
   branch   Branch @relation(fields: [branchId], references: [id])
 
-  userId String
+  userId String // 👈 සල්ලි Checkout කරපු / වියදම් කරපු Admin
   user   User   @relation(fields: [userId], references: [id])
 
   createdAt DateTime @default(now())
