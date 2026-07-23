@@ -1,4 +1,4 @@
-import { User } from "./types";
+import { Branch, Category, Customer, Product, StockItem, StockLog, User } from "./types";
 
 export const MOCK_USERS: User[] = [
     {
@@ -81,6 +81,309 @@ export const MOCK_BRANCHES = [
     "Galle Branch",
     "Kandy Branch",
 ];
+
+// Mock Customers Data
+export const MOCK_CUSTOMERS: Customer[] = [
+    {
+        id: "1",
+        name: "Roshan Kumar",
+        phone: "+94 777 123456",
+        nic: "123456789V",
+        address: "123 Main Street, Colombo 3",
+        totalDue: 45000,
+        registeredDate: "2024-01-10",
+        lastTransaction: "2024-07-05",
+    },
+    {
+        id: "2",
+        name: "Priya Perera",
+        phone: "+94 765 234567",
+        nic: "987654321V",
+        address: "45 Hill Road, Negombo",
+        totalDue: 0,
+        registeredDate: "2024-02-15",
+        lastTransaction: "2024-07-04",
+    },
+    {
+        id: "3",
+        name: "Anura Silva",
+        phone: "+94 712 345678",
+        nic: "",
+        address: "78 Beach Lane, Galle",
+        totalDue: 28500,
+        registeredDate: "2024-03-20",
+        lastTransaction: "2024-07-02",
+    },
+    {
+        id: "4",
+        name: "Nimal Jayasuriya",
+        phone: "+94 758 456789",
+        nic: "456789123V",
+        address: "Kandy District",
+        totalDue: 62000,
+        registeredDate: "2024-04-05",
+        lastTransaction: "2024-07-03",
+    },
+    {
+        id: "5",
+        name: "Lakshmi Wijesinghe",
+        phone: "+94 721 567890",
+        nic: "654321987V",
+        address: "Matara City Center",
+        totalDue: 0,
+        registeredDate: "2024-04-18",
+        lastTransaction: "2024-07-05",
+    },
+    {
+        id: "6",
+        name: "Keshan Bandara",
+        phone: "+94 745 678901",
+        nic: "",
+        address: "-",
+        totalDue: 15500,
+        registeredDate: "2024-05-01",
+        lastTransaction: "2024-07-01",
+    },
+    {
+        id: "7",
+        name: "Samantha De Silva",
+        phone: "+94 767 789012",
+        nic: "321654987V",
+        address: "Jaffna Commercial Zone",
+        totalDue: 38000,
+        registeredDate: "2024-05-12",
+        lastTransaction: "2024-06-30",
+    },
+    {
+        id: "8",
+        name: "Rajiv Menon",
+        phone: "+94 770 890123",
+        nic: "789123456V",
+        address: "Colombo 5",
+        totalDue: 0,
+        registeredDate: "2024-05-25",
+        lastTransaction: "2024-07-05",
+    },
+]
+
+// Mock data
+export const MOCK_BRANCHES_Branch: Branch[] = [
+    {
+        id: "1",
+        name: "Main Branch",
+        location: "Colombo, Western Province",
+        status: "active",
+        createdAt: "2024-01-15",
+        assignedAdmin: {
+            id: "admin1",
+            name: "Roshan Kumar",
+            email: "roshan@timberflow.com",
+        },
+    },
+    {
+        id: "2",
+        name: "Negombo Branch",
+        location: "Negombo, Western Province",
+        status: "active",
+        createdAt: "2024-02-20",
+        assignedAdmin: {
+            id: "admin2",
+            name: "Priya Perera",
+            email: "priya@timberflow.com",
+        },
+    },
+    {
+        id: "3",
+        name: "Kandy Branch",
+        location: "Kandy, Central Province",
+        status: "active",
+        createdAt: "2024-03-10",
+        assignedAdmin: null,
+    },
+    {
+        id: "4",
+        name: "Galle Branch",
+        location: "Galle, Southern Province",
+        status: "blocked",
+        createdAt: "2024-04-05",
+        assignedAdmin: {
+            id: "admin3",
+            name: "Anura Silva",
+            email: "anura@timberflow.com",
+        },
+    },
+    {
+        id: "5",
+        name: "Jaffna Branch",
+        location: "Jaffna, Northern Province",
+        status: "active",
+        createdAt: "2024-04-18",
+        assignedAdmin: null,
+    },
+]
+
+export const MOCK_ADMINS_Brabch = [
+    { id: "admin1", name: "Roshan Kumar", email: "roshan@timberflow.com" },
+    { id: "admin2", name: "Priya Perera", email: "priya@timberflow.com" },
+    { id: "admin3", name: "Anura Silva", email: "anura@timberflow.com" },
+    { id: "admin4", name: "Nisha Gupta", email: "nisha@timberflow.com" },
+]
+
+export const MOCK_STOCK: StockItem[] = [
+    {
+        id: "1",
+        productId: "p1",
+        productName: "Standard Wood Pallets",
+        sku: "WP-001",
+        category: "Pallets",
+        currentStock: 120,
+        minStock: 100,
+        branch: "Main Branch",
+        lastUpdated: "2024-07-05",
+    },
+    {
+        id: "2",
+        productId: "p2",
+        productName: "Treated Wood Boards",
+        sku: "WB-002",
+        category: "Boards",
+        currentStock: 35,
+        minStock: 50,
+        branch: "Main Branch",
+        lastUpdated: "2024-07-04",
+    },
+    {
+        id: "3",
+        productId: "p3",
+        productName: "Plastic Pallets",
+        sku: "PP-001",
+        category: "Plastics",
+        currentStock: 0,
+        minStock: 30,
+        branch: "Main Branch",
+        lastUpdated: "2024-07-03",
+    },
+    {
+        id: "4",
+        productId: "p4",
+        productName: "Metal Angles",
+        sku: "MA-001",
+        category: "Metal Items",
+        currentStock: 450,
+        minStock: 100,
+        branch: "Main Branch",
+        lastUpdated: "2024-07-05",
+    },
+    {
+        id: "5",
+        productId: "p5",
+        productName: "Premium Wood Pallets",
+        sku: "WP-003",
+        category: "Pallets",
+        currentStock: 250,
+        minStock: 150,
+        branch: "Main Branch",
+        lastUpdated: "2024-07-05",
+    },
+]
+
+export const MOCK_PRODUCTS: Product[] = [
+    {
+        id: "p1",
+        name: "Standard Wood Pallets",
+        sku: "WP-001",
+        category: "Pallets",
+        unitPrice: 2500,
+        createdDate: "2024-01-10",
+    },
+    {
+        id: "p2",
+        name: "Treated Wood Boards",
+        sku: "WB-002",
+        category: "Boards",
+        unitPrice: 850,
+        createdDate: "2024-01-15",
+    },
+    {
+        id: "p3",
+        name: "Plastic Pallets",
+        sku: "PP-001",
+        category: "Plastics",
+        unitPrice: 1500,
+        createdDate: "2024-02-01",
+    },
+    {
+        id: "p4",
+        name: "Metal Angles",
+        sku: "MA-001",
+        category: "Metal Items",
+        unitPrice: 450,
+        createdDate: "2024-02-15",
+    },
+    {
+        id: "p5",
+        name: "Premium Wood Pallets",
+        sku: "WP-003",
+        category: "Pallets",
+        unitPrice: 3200,
+        createdDate: "2024-03-01",
+    },
+]
+
+export const MOCK_CATEGORIES: Category[] = [
+    { id: "c1", name: "Pallets" },
+    { id: "c2", name: "Boards" },
+    { id: "c3", name: "Plastics" },
+    { id: "c4", name: "Metal Items" },
+]
+
+export const MOCK_LOGS: StockLog[] = [
+    {
+        id: "l1",
+        timestamp: "2024-07-05 14:30",
+        branch: "Main Branch",
+        product: "Standard Wood Pallets",
+        logType: "STOCK_IN",
+        quantity: 50,
+        note: "Supplier delivery",
+    },
+    {
+        id: "l2",
+        timestamp: "2024-07-05 12:15",
+        branch: "Main Branch",
+        product: "Treated Wood Boards",
+        logType: "STOCK_OUT",
+        quantity: 25,
+        note: "Customer order #2024-001",
+    },
+    {
+        id: "l3",
+        timestamp: "2024-07-04 09:45",
+        branch: "Negombo Branch",
+        product: "Metal Angles",
+        logType: "ADJUSTMENT",
+        quantity: -10,
+        note: "Inventory correction",
+    },
+    {
+        id: "l4",
+        timestamp: "2024-07-04 08:20",
+        branch: "Main Branch",
+        product: "Plastic Pallets",
+        logType: "DAMAGE",
+        quantity: -5,
+        note: "Damaged in transit",
+    },
+    {
+        id: "l5",
+        timestamp: "2024-07-03 16:00",
+        branch: "Galle Branch",
+        product: "Premium Wood Pallets",
+        logType: "STOCK_IN",
+        quantity: 100,
+        note: "Transfer from warehouse",
+    },
+]
 
 export const ROLE_COLORS: Record<string, { bg: string; text: string }> = {
     SUPER_ADMIN: { bg: "bg-purple-100 dark:bg-purple-900/30", text: "text-purple-700 dark:text-purple-300" },
