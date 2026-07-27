@@ -2,18 +2,32 @@
 
 import React from "react";
 import { Search } from "lucide-react";
-import { MOCK_BRANCHES } from "@/lib/constants";
+
+interface Branch {
+    id: string;
+    name: string;
+}
+
+interface UserFiltersProps {
+    searchQuery: string;
+    setSearchQuery: (value: string) => void;
+    selectedRole: string;
+    setSelectedRole: (value: string) => void;
+    selectedBranch: string;
+    setSelectedBranch: (value: string) => void;
+    branches?: Branch[];
+}
 
 export function UserFilters({
     searchQuery, setSearchQuery,
     selectedRole, setSelectedRole,
-    selectedBranch, setSelectedBranch
-}: any) {
+    selectedBranch, setSelectedBranch,
+    branches = []
+}: UserFiltersProps) {
     return (
-        // Grid එක column 4 කට බෙදමු. Mobile වලදී 1 යි.
         <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-4">
 
-            {/* Search - Desktop වලදී space වැඩිපුර ලබා දෙන්න (col-span-2) */}
+            {/* Search */}
             <div className="md:col-span-2">
                 <label className="text-xs font-semibold text-muted-foreground">Search</label>
                 <div className="relative mt-1">
@@ -37,6 +51,7 @@ export function UserFilters({
                     className="w-full mt-1 px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary"
                 >
                     <option value="ALL">All Roles</option>
+                    <option value="SUPER_ADMIN">Super Admin</option>
                     <option value="ADMIN">Admin</option>
                     <option value="CASHIER">Cashier</option>
                 </select>
@@ -51,12 +66,13 @@ export function UserFilters({
                     className="w-full mt-1 px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary"
                 >
                     <option value="ALL">All Branches</option>
-                    {MOCK_BRANCHES.map((branch) => (
-                        <option key={branch} value={branch}>{branch}</option>
+                    {branches.map((branch) => (
+                        <option key={branch.id} value={branch.name}>
+                            {branch.name}
+                        </option>
                     ))}
                 </select>
             </div>
-
 
         </div>
     );

@@ -9,6 +9,6 @@ export type ActionResult<T = void> =
     | {
         success: false;
         error: string;
-        code?: "UNAUTHORIZED" | "FORBIDDEN" | "NOT_FOUND" | "VALIDATION_ERROR" | "SERVER_ERROR";
+        code?: "UNAUTHORIZED" | "FORBIDDEN" | "NOT_FOUND" | "VALIDATION_ERROR" | "CLERK_ERROR" | "SERVER_ERROR";
         fieldErrors?: Record<string, string[]>; // Form validation errors සඳහා (e.g., { name: ["Name is required"] })
     };

@@ -13,10 +13,24 @@ const ROLE_COLORS: Record<string, { bg: string; text: string }> = {
 };
 
 const getInitials = (name: string) => {
-    return name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
+    return name ? name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2) : "U";
 };
 
-export function UserTable({ users, onToggleBlock, onDelete }: any) {
+interface UserTableProps {
+    users: any[];
+    onToggleBlock: (user: any) => void;
+    onDelete: (user: any) => void;
+    onEdit: (user: any) => void;
+    onChangeBranch: (user: any) => void;
+}
+
+export function UserTable({
+    users,
+    onToggleBlock,
+    onDelete,
+    onEdit,
+    onChangeBranch
+}: UserTableProps) {
     return (
         <div className="rounded-lg border border-border bg-card overflow-hidden">
             <Table>
@@ -31,7 +45,10 @@ export function UserTable({ users, onToggleBlock, onDelete }: any) {
                 </TableHeader>
                 <TableBody>
                     {users.map((user: any) => (
-                        <TableRow key={user.id} className={`border-b border-border hover:bg-secondary/30 transition-colors ${user.status === "blocked" ? "opacity-60" : ""}`}>
+                        <TableRow
+                            key={user.id}
+                            className={`border-b border-border hover:bg-secondary/30 transition-colors ${user.status === "blocked" ? "opacity-60" : ""}`}
+                        >
                             <TableCell className="py-3">
                                 <div className="flex items-center gap-3">
                                     <div className="h-9 w-9 rounded-full bg-primary/20 flex items-center justify-center text-xs font-bold text-primary">
@@ -50,7 +67,7 @@ export function UserTable({ users, onToggleBlock, onDelete }: any) {
                             </TableCell>
                             <TableCell className="text-sm text-foreground">{user.branch}</TableCell>
                             <TableCell>
-                                <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${user.status === "active" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
+                                <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${user.status === "active" ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300" : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300"}`}>
                                     {user.status === "active" ? "Active" : "Blocked"}
                                 </span>
                             </TableCell>
@@ -63,16 +80,39 @@ export function UserTable({ users, onToggleBlock, onDelete }: any) {
                                     </PopoverTrigger>
                                     <PopoverContent align="end" className="w-48 p-0">
                                         <div className="flex flex-col">
-                                            <button className="px-4 py-2 text-sm text-left hover:bg-secondary flex items-center gap-2 transition-colors">
+                                            {/* Edit User Button */}
+                                            <button
+                                                onClick={() => onEdit(user)}
+                                                className="px-4 py-2 text-sm text-left hover:bg-secondary flex items-center gap-2 transition-colors w-full"
+                                            >
                                                 <Edit2 className="h-4 w-4" /> Edit Details
                                             </button>
-                                            <button className="px-4 py-2 text-sm text-left hover:bg-secondary flex items-center gap-2 transition-colors">
+
+                                            {/* Change Branch Button */}
+                                            <button
+                                                onClick={() => onChangeBranch(user)}
+                                                className="px-4 py-2 text-sm text-left hover:bg-secondary flex items-center gap-2 transition-colors w-full"
+                                            >
                                                 <Users className="h-4 w-4" /> Change Branch
                                             </button>
-                                            <button onClick={() => onToggleBlock(user.id)} className="px-4 py-2 text-sm text-left hover:bg-secondary flex items-center gap-2 transition-colors">
-                                                {user.status === "active" ? <><Lock className="h-4 w-4" /> Block User</> : <><Unlock className="h-4 w-4" /> Unblock User</>}
+
+                                            {/* Toggle Block/Unblock Button */}
+                                            <button
+                                                onClick={() => onToggleBlock(user)}
+                                                className="px-4 py-2 text-sm text-left hover:bg-secondary flex items-center gap-2 transition-colors w-full"
+                                            >
+                                                {user.status === "active" ? (
+                                                    <><Lock className="h-4 w-4" /> Block User</>
+                                                ) : (
+                                                    <><Unlock className="h-4 w-4" /> Unblock User</>
+                                                )}
                                             </button>
-                                            <button onClick={() => onDelete(user)} className="px-4 py-2 text-sm text-left text-destructive hover:bg-destructive/10 flex items-center gap-2 transition-colors border-t border-border">
+
+                                            {/* Delete User Button */}
+                                            <button
+                                                onClick={() => onDelete(user)}
+                                                className="px-4 py-2 text-sm text-left text-destructive hover:bg-destructive/10 flex items-center gap-2 transition-colors border-t border-border w-full"
+                                            >
                                                 <Trash2 className="h-4 w-4" /> Delete User
                                             </button>
                                         </div>

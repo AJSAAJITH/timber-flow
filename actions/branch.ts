@@ -7,7 +7,7 @@ import { ActionResult } from "@/lib/types/action-result";
 import { PrismaClientKnownRequestError } from "@prisma/client/runtime/client";
 import { revalidatePath } from "next/cache";
 
-// GET ALL BRANCHES
+// GET ALL BRANCHES WITH ADMINS
 export async function getBranches(): Promise<ActionResult<Branch[]>> {
     try {
         const branches = await prisma.branch.findMany({
@@ -246,5 +246,25 @@ export async function getAvailableAdmins() {
     } catch (error) {
         console.error("Error fetching admins:", error);
         return actionError("Failed to fetch available admins", "SERVER_ERROR");
+    }
+}
+
+// Get All Branches
+export async function getAllBranches(): Promise<ActionResult<{ id: string; name: string }[]>> {
+    try {
+        const branches = await prisma.branch.findMany({
+            select: {
+                id: true,
+                name: true,
+            },
+            orderBy: {
+                name: "asc",
+            },
+        });
+
+        return actionSuccess(branches);
+    } catch (error) {
+        console.error("Error fetching branches:", error);
+        return actionError("Failed to fetch branches", "SERVER_ERROR");
     }
 }

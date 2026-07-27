@@ -10,28 +10,57 @@ import {
     DialogDescription
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { MOCK_BRANCHES } from "@/lib/constants" // Branch ලැයිස්තුව ලබාගැනීමට
+import { Eye, EyeOff } from "lucide-react"
+import { createUserSchema } from "@/lib/validations/user"
 
 interface AddUserDialogProps {
     open: boolean
     onOpenChange: (open: boolean) => void
-    onAddUser: (user: any) => void
+    onAddUser: (user: any) => Promise<void> | void
 }
 
-export function AddUserDialog({ open, onOpenChange, onAddUser }: AddUserDialogProps) {
+export function AddUserDialog({
+    open,
+    onOpenChange,
+    onAddUser
+}: AddUserDialogProps) {
     const [formData, setFormData] = useState({
         name: "",
         email: "",
-        role: "CASHIER",
-        branch: "Main Branch"
+        password: "",
+        role: "CASHIER"
     })
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const [showPassword, setShowPassword] = useState(false)
+    const [errors, setErrors] = useState<Record<string, string>>({})
+    const [loading, setLoading] = useState(false)
+
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
-        onAddUser(formData)
-        onOpenChange(false)
-        // පෝරමය හිස් කිරීමට (Optional)
-        setFormData({ name: "", email: "", role: "CASHIER", branch: "Main Branch" })
+        setErrors({})
+
+        // Client-side Zod validation check
+        const result = createUserSchema.safeParse(formData)
+        if (!result.success) {
+            const fieldErrors: Record<string, string> = {}
+            result.error.issues.forEach((err) => {
+                if (err.path[0]) {
+                    fieldErrors[err.path[0] as string] = err.message
+                }
+            })
+            setErrors(fieldErrors)
+            return
+        }
+
+        setLoading(true)
+        await onAddUser(formData)
+        setLoading(false)
+        setFormData({
+            name: "",
+            email: "",
+            password: "",
+            role: "CASHIER"
+        })
     }
 
     return (
@@ -40,7 +69,7 @@ export function AddUserDialog({ open, onOpenChange, onAddUser }: AddUserDialogPr
                 <DialogHeader>
                     <DialogTitle>Add New User</DialogTitle>
                     <DialogDescription>
-                        Create a new user account with the required information
+                        Create a new user account with credentials for login
                     </DialogDescription>
                 </DialogHeader>
 
@@ -56,8 +85,8 @@ export function AddUserDialog({ open, onOpenChange, onAddUser }: AddUserDialogPr
                             value={formData.name}
                             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                             className="w-full mt-1 px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary"
-                            required
                         />
+                        {errors.name && <p className="text-xs text-red-500 mt-1">{errors.name}</p>}
                     </div>
 
                     {/* Email */}
@@ -71,8 +100,32 @@ export function AddUserDialog({ open, onOpenChange, onAddUser }: AddUserDialogPr
                             value={formData.email}
                             onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                             className="w-full mt-1 px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary"
-                            required
                         />
+                        {errors.email && <p className="text-xs text-red-500 mt-1">{errors.email}</p>}
+                    </div>
+
+                    {/* Password Field */}
+                    <div>
+                        <label className="text-sm font-medium text-foreground">
+                            Initial Password <span className="text-red-500">*</span>
+                        </label>
+                        <div className="relative mt-1">
+                            <input
+                                type={showPassword ? "text" : "password"}
+                                placeholder="Enter initial password"
+                                value={formData.password}
+                                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                                className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg pr-10 focus:outline-none focus:ring-1 focus:ring-primary"
+                            />
+                            <button
+                                type="button"
+                                onClick={() => setShowPassword(!showPassword)}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                            >
+                                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                            </button>
+                        </div>
+                        {errors.password && <p className="text-xs text-red-500 mt-1">{errors.password}</p>}
                     </div>
 
                     {/* Role */}
@@ -86,24 +139,10 @@ export function AddUserDialog({ open, onOpenChange, onAddUser }: AddUserDialogPr
                             className="w-full mt-1 px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary"
                         >
                             <option value="ADMIN">Admin</option>
+                            <option value="SUPER_ADMIN">Super Admin</option>
                             <option value="CASHIER">Cashier</option>
                         </select>
-                    </div>
-
-                    {/* Branch */}
-                    <div>
-                        <label className="text-sm font-medium text-foreground">
-                            Assign Branch <span className="text-red-500">*</span>
-                        </label>
-                        <select
-                            value={formData.branch}
-                            onChange={(e) => setFormData({ ...formData, branch: e.target.value })}
-                            className="w-full mt-1 px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary"
-                        >
-                            {MOCK_BRANCHES.map((branch) => (
-                                <option key={branch} value={branch}>{branch}</option>
-                            ))}
-                        </select>
+                        {errors.role && <p className="text-xs text-red-500 mt-1">{errors.role}</p>}
                     </div>
 
                     <DialogFooter className="mt-4">
@@ -111,10 +150,13 @@ export function AddUserDialog({ open, onOpenChange, onAddUser }: AddUserDialogPr
                             type="button"
                             variant="outline"
                             onClick={() => onOpenChange(false)}
+                            disabled={loading}
                         >
                             Cancel
                         </Button>
-                        <Button type="submit">Create User</Button>
+                        <Button type="submit" disabled={loading}>
+                            {loading ? "Creating..." : "Create User"}
+                        </Button>
                     </DialogFooter>
                 </form>
             </DialogContent>
