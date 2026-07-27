@@ -26,19 +26,7 @@ export interface Customer {
     lastTransaction?: string
 }
 
-// Types
-export interface Branch {
-    id: string
-    name: string
-    location: string
-    status: "active" | "blocked"
-    createdAt: string
-    assignedAdmin: {
-        id: string
-        name: string
-        email: string
-    } | null
-}
+
 
 // Types - invenroty
 export interface StockItem {
@@ -75,5 +63,33 @@ export interface StockLog {
     logType: "STOCK_IN" | "STOCK_OUT" | "ADJUSTMENT" | "DAMAGE"
     quantity: number
     note: string
+}
+
+// branch management
+export interface AssignedAdmin {
+    id: string;
+    name: string;
+    email: string;
+}
+
+export interface Branch {
+    id: string;
+    name: string;
+    location: string;
+    status: "active" | "blocked";
+    assignedAdmin?: AssignedAdmin | null;
+    createdAt: Date;
+}
+
+export interface CreateBranchInput {
+    name: string;
+    location?: string;
+    adminUserId?: string; // තෝරාගත් Admin User ගේ ID එක
+}
+
+export interface UpdateBranchInput {
+    name?: string;
+    location?: string;
+    adminUserId?: string | null;
 }
 

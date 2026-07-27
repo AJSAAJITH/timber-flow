@@ -36,13 +36,12 @@ enum InventoryLogType {
   RETURN
 }
 
-// 💡 වියදම් වර්ග වර්ගීකරණය කිරීමට Enum එකක් එකතු කලා
 enum ExpenseType {
   GENERAL
-  PROFIT_WITHDRAWAL // 👈 කවුන්ටරයෙන් මුදල් ලබා ගැනීම් (Owner/Admin cashout)
+  PROFIT_WITHDRAWAL
   SALARY
-  PETTY_CASH // එදිනෙදා සුළු වියදම් (කෑම, ප්‍රවාහන, ආදී)
-  BILL_PAYMENT // ලයිට් බිල්, වතුර බිල්, කුලී
+  PETTY_CASH
+  BILL_PAYMENT
 }
 
 // ==========================================
@@ -51,11 +50,11 @@ enum ExpenseType {
 
 model Branch {
   id        String  @id @default(cuid())
-  name      String
+  name      String  @unique
   location  String?
   isBlocked Boolean @default(false)
 
-  users          User[]
+  users          User[] // Many-to-many relationship
   inventory      BranchInventory[]
   sales          Sale[]
   expenses       Expense[]
@@ -74,8 +73,7 @@ model User {
   role      Role    @default(CASHIER)
   isBlocked Boolean @default(false)
 
-  branchId String?
-  branch   Branch? @relation(fields: [branchId], references: [id])
+  branches Branch[]
 
   sales          Sale[]
   expenses       Expense[]
@@ -223,13 +221,13 @@ model SaleItem {
 model Expense {
   id          String      @id @default(cuid())
   amount      Decimal     @db.Decimal(10, 2)
-  description String // 👈 සල්ලි ගත්තේ ඇයි කියන හේතුව (Reason)
-  type        ExpenseType @default(GENERAL) // 👈 String වෙනුවට Enum එක දැම්මා
+  description String
+  type        ExpenseType @default(GENERAL)
 
   branchId String
   branch   Branch @relation(fields: [branchId], references: [id])
 
-  userId String // 👈 සල්ලි Checkout කරපු / වියදම් කරපු Admin
+  userId String
   user   User   @relation(fields: [userId], references: [id])
 
   createdAt DateTime @default(now())
