@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import {
     Dialog,
     DialogContent,
@@ -13,11 +13,34 @@ import { Button } from "@/components/ui/button"
 import { Loader2 } from "lucide-react"
 import { CustomerFormValues, customerSchema } from "@/lib/validations/customer"
 
-export function AddCustomerDialog({ open, onOpenChange, onAdd }: any) {
-    const initialState: CustomerFormValues = { name: "", phone: "", nic: "", address: "" }
-    const [formData, setFormData] = useState<CustomerFormValues>(initialState)
+interface EditCustomerDialogProps {
+    open: boolean
+    onOpenChange: (open: boolean) => void
+    customer: any
+    onUpdate: (id: string, data: CustomerFormValues) => Promise<boolean>
+}
+
+export function EditCustomerDialog({ open, onOpenChange, customer, onUpdate }: EditCustomerDialogProps) {
+    const [formData, setFormData] = useState<CustomerFormValues>({
+        name: "",
+        phone: "",
+        nic: "",
+        address: "",
+    })
     const [errors, setErrors] = useState<Record<string, string>>({})
     const [isSubmitting, setIsSubmitting] = useState(false)
+
+    useEffect(() => {
+        if (customer) {
+            setFormData({
+                name: customer.name || "",
+                phone: customer.phone || "",
+                nic: customer.nic || "",
+                address: customer.address || "",
+            })
+            setErrors({})
+        }
+    }, [customer])
 
     const handleSave = async () => {
         setErrors({})
@@ -33,12 +56,11 @@ export function AddCustomerDialog({ open, onOpenChange, onAdd }: any) {
         }
 
         setIsSubmitting(true)
-        const success = await onAdd(formData)
+        const success = await onUpdate(customer.id, formData)
         setIsSubmitting(false)
 
         if (success) {
             onOpenChange(false)
-            setFormData(initialState)
         }
     }
 
@@ -46,18 +68,20 @@ export function AddCustomerDialog({ open, onOpenChange, onAdd }: any) {
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="sm:max-w-md">
                 <DialogHeader>
-                    <DialogTitle>Register New Customer</DialogTitle>
-                    <DialogDescription>Add a new customer to your system</DialogDescription>
+                    <DialogTitle>Edit Customer Profile</DialogTitle>
+                    <DialogDescription>
+                        Update profile details for {customer?.name}
+                    </DialogDescription>
                 </DialogHeader>
 
                 <div className="space-y-4">
+                    {/* Full Name */}
                     <div>
                         <label className="text-sm font-medium text-foreground">
                             Full Name <span className="text-red-500">*</span>
                         </label>
                         <input
                             type="text"
-                            placeholder="Enter customer name"
                             value={formData.name}
                             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                             className="w-full mt-1 px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary"
@@ -65,11 +89,11 @@ export function AddCustomerDialog({ open, onOpenChange, onAdd }: any) {
                         {errors.name && <p className="text-xs text-red-500 mt-1">{errors.name}</p>}
                     </div>
 
+                    {/* Phone */}
                     <div>
                         <label className="text-sm font-medium text-foreground">Phone Number</label>
                         <input
                             type="tel"
-                            placeholder="e.g., 0771234567"
                             value={formData.phone}
                             onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                             className="w-full mt-1 px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary"
@@ -77,11 +101,11 @@ export function AddCustomerDialog({ open, onOpenChange, onAdd }: any) {
                         {errors.phone && <p className="text-xs text-red-500 mt-1">{errors.phone}</p>}
                     </div>
 
+                    {/* NIC */}
                     <div>
                         <label className="text-sm font-medium text-foreground">NIC Number</label>
                         <input
                             type="text"
-                            placeholder="e.g., 123456789V"
                             value={formData.nic}
                             onChange={(e) => setFormData({ ...formData, nic: e.target.value })}
                             className="w-full mt-1 px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary"
@@ -89,10 +113,10 @@ export function AddCustomerDialog({ open, onOpenChange, onAdd }: any) {
                         {errors.nic && <p className="text-xs text-red-500 mt-1">{errors.nic}</p>}
                     </div>
 
+                    {/* Address */}
                     <div>
                         <label className="text-sm font-medium text-foreground">Address</label>
                         <textarea
-                            placeholder="Enter customer address"
                             value={formData.address}
                             onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                             className="w-full mt-1 px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary min-h-20 resize-none"
@@ -107,7 +131,7 @@ export function AddCustomerDialog({ open, onOpenChange, onAdd }: any) {
                     </Button>
                     <Button onClick={handleSave} disabled={isSubmitting}>
                         {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        Register Customer
+                        Save Changes
                     </Button>
                 </DialogFooter>
             </DialogContent>

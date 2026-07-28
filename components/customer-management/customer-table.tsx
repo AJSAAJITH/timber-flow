@@ -4,11 +4,11 @@ import React from "react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { MoreVertical, Edit2, History, DollarSign, Trash2, AlertCircle } from "lucide-react"
+import Link from "next/link"
 
-export function CustomerTable({ customers, onDelete, onPayment }: any) {
+export function CustomerTable({ customers, onDelete, onPayment, onEdit }: any) {
     return (
         <div className="space-y-4">
-            {/* Table View */}
             <div className="rounded-lg border border-border bg-card overflow-hidden">
                 <Table>
                     <TableHeader>
@@ -28,11 +28,11 @@ export function CustomerTable({ customers, onDelete, onPayment }: any) {
                                 className="border-b border-border hover:bg-secondary/30 transition-colors"
                             >
                                 <TableCell className="py-3 font-medium text-foreground">{customer.name}</TableCell>
-                                <TableCell className="py-3 text-sm font-mono text-muted-foreground">{customer.phone}</TableCell>
+                                <TableCell className="py-3 text-sm font-mono text-muted-foreground">{customer.phone || "-"}</TableCell>
                                 <TableCell className="py-3 text-sm text-muted-foreground">{customer.nic || "-"}</TableCell>
                                 <TableCell className="py-3 text-sm text-muted-foreground max-w-xs truncate">{customer.address || "-"}</TableCell>
-                                <TableCell className={`py-3 text-right font-bold ${customer.totalDue > 0 ? "text-red-700 dark:text-red-300" : "text-green-700 dark:text-green-300"}`}>
-                                    {customer.totalDue > 0 ? `LKR ${customer.totalDue.toLocaleString()}` : "Clear"}
+                                <TableCell className={`py-3 text-right font-bold ${Number(customer.totalDue) > 0 ? "text-red-700 dark:text-red-300" : "text-green-700 dark:text-green-300"}`}>
+                                    {Number(customer.totalDue) > 0 ? `LKR ${Number(customer.totalDue).toLocaleString()}` : "Clear"}
                                 </TableCell>
                                 <TableCell className="py-3 text-right">
                                     <Popover>
@@ -43,12 +43,17 @@ export function CustomerTable({ customers, onDelete, onPayment }: any) {
                                         </PopoverTrigger>
                                         <PopoverContent align="end" className="w-48 p-0">
                                             <div className="flex flex-col">
-                                                <button className="px-4 py-2 text-sm text-left hover:bg-secondary flex items-center gap-2 transition-colors">
+                                                <button
+                                                    onClick={() => onEdit(customer)}
+                                                    className="px-4 py-2 text-sm text-left hover:bg-secondary flex items-center gap-2 transition-colors"
+                                                >
                                                     <Edit2 className="h-4 w-4" /> Edit Profile
                                                 </button>
-                                                <button className="px-4 py-2 text-sm text-left hover:bg-secondary flex items-center gap-2 transition-colors">
-                                                    <History className="h-4 w-4" /> Purchase History
-                                                </button>
+                                                <Link href={`/dashboard/sales?customerId=${customer.id}`}>
+                                                    <button className="w-full px-4 py-2 text-sm text-left hover:bg-secondary flex items-center gap-2 transition-colors">
+                                                        <History className="h-4 w-4" /> Purchase History
+                                                    </button>
+                                                </Link>
                                                 <button
                                                     onClick={() => onPayment(customer)}
                                                     className="px-4 py-2 text-sm text-left hover:bg-secondary flex items-center gap-2 transition-colors"
@@ -71,7 +76,6 @@ export function CustomerTable({ customers, onDelete, onPayment }: any) {
                 </Table>
             </div>
 
-            {/* Empty State */}
             {customers.length === 0 && (
                 <div className="rounded-lg border border-dashed border-border bg-secondary/30 p-12 text-center">
                     <AlertCircle className="mx-auto h-8 w-8 text-muted-foreground mb-2" />

@@ -1,73 +1,142 @@
 "use client"
 
-import React, { useState, useMemo } from "react"
+import React, { useState, useMemo, useEffect, useTransition } from "react"
 import { Button } from "@/components/ui/button"
-import { Plus, Search } from "lucide-react" // Search icon එක import කිරීමට වග බලා ගන්න
-import { MOCK_CUSTOMERS } from "@/lib/constants"
-import { Customer } from "@/lib/types"
+import { Plus, Search, Loader2 } from "lucide-react"
+
+// Import Server Actions
+
+import { CustomerFormValues } from "@/lib/validations/customer"
 
 // Import Components
 import { CustomerStats } from "@/components/customer-management/customer-stats"
 import { QuickReachSection } from "@/components/customer-management/quick-reach"
 import { CustomerTable } from "@/components/customer-management/customer-table"
 import { AddCustomerDialog } from "@/components/customer-management/add-customer-dialog"
+import { EditCustomerDialog } from "@/components/customer-management/edit-customer-dialog"
 import { DeleteCustomerDialog } from "@/components/customer-management/delete-customer-dialog"
 import { CreditPaymentDialog } from "@/components/customer-management/credit-payment-dialog"
+import { createCustomer, deleteCustomer, getCustomers, recordCreditPayment, updateCustomer } from "@/actions/customer.action"
 
 export default function CustomersClientPage() {
-    // --- State Management ---
-    const [customers, setCustomers] = useState<Customer[]>(MOCK_CUSTOMERS)
+    // --- States ---
+    const [customers, setCustomers] = useState<any[]>([])
+    const [isLoading, setIsLoading] = useState(true)
+    const [isPending, startTransition] = useTransition()
+
     const [searchQuery, setSearchQuery] = useState("")
     const [showDebtorsOnly, setShowDebtorsOnly] = useState(false)
 
+    // Dialog States
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
+    const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
     const [isCreditDialogOpen, setIsCreditDialogOpen] = useState(false)
-    const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
+    const [selectedCustomer, setSelectedCustomer] = useState<any | null>(null)
 
-    // --- Logic ---
+    // --- Initial Data Loading ---
+    const fetchCustomers = async () => {
+        setIsLoading(true)
+        const result = await getCustomers()
+        if (result.success) {
+            setCustomers(result.data)
+        } else {
+            alert(result.error)
+        }
+        setIsLoading(false)
+    }
+
+    useEffect(() => {
+        fetchCustomers()
+    }, [])
+
+    // --- Search & Filter Logic ---
     const filteredCustomers = useMemo(() => {
         return customers.filter((customer) => {
-            const matchesSearch = customer.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                customer.phone.includes(searchQuery)
-            const matchesDebtors = !showDebtorsOnly || customer.totalDue > 0
+            const query = searchQuery.toLowerCase()
+            const matchesSearch =
+                customer.name.toLowerCase().includes(query) ||
+                (customer.phone && customer.phone.includes(query)) ||
+                (customer.nic && customer.nic.toLowerCase().includes(query))
+
+            const matchesDebtors = !showDebtorsOnly || Number(customer.totalDue) > 0
             return matchesSearch && matchesDebtors
         })
     }, [searchQuery, showDebtorsOnly, customers])
 
+    // --- Stats Calculation ---
     const stats = useMemo(() => ({
         totalCustomers: customers.length,
-        debtorCount: customers.filter((c) => c.totalDue > 0).length,
-        totalDue: customers.reduce((sum, c) => sum + c.totalDue, 0)
+        debtorCount: customers.filter((c) => Number(c.totalDue) > 0).length,
+        totalDue: customers.reduce((sum, c) => sum + Number(c.totalDue), 0),
     }), [customers])
 
-    // --- Handlers ---
-    const handleAddCustomer = (newCustomer: Omit<Customer, "id" | "totalDue" | "registeredDate">) => {
-        const customerToAdd: Customer = {
-            ...newCustomer,
-            id: Date.now().toString(),
-            totalDue: 0,
-            registeredDate: new Date().toISOString().split("T")[0],
-        }
-        setCustomers([...customers, customerToAdd])
-    }
+    // --- Action Handlers ---
 
-    const handleDelete = () => {
-        if (selectedCustomer) {
-            setCustomers(prev => prev.filter(c => c.id !== selectedCustomer.id))
-            setIsDeleteDialogOpen(false)
-            setSelectedCustomer(null)
+    // 1. Add Customer
+    const handleAddCustomer = async (data: CustomerFormValues): Promise<boolean> => {
+        const result = await createCustomer(data)
+        if (result.success) {
+            setCustomers((prev) => [result.data, ...prev])
+            return true
+        } else {
+            alert(result.error)
+            return false
         }
     }
 
-    const handleRecordPayment = (amount: number) => {
-        if (selectedCustomer) {
-            setCustomers(customers.map((c) =>
-                c.id === selectedCustomer.id
-                    ? { ...c, totalDue: Math.max(0, c.totalDue - amount) }
-                    : c
-            ))
-            setIsCreditDialogOpen(false)
+    // 2. Edit Customer
+    const handleEditCustomer = async (id: string, data: CustomerFormValues): Promise<boolean> => {
+        const result = await updateCustomer(id, data)
+        if (result.success) {
+            setCustomers((prev) =>
+                prev.map((c) => (c.id === id ? result.data : c))
+            )
+            return true
+        } else {
+            alert(result.error)
+            return false
+        }
+    }
+
+    // 3. Delete Customer
+    const handleDelete = async () => {
+        if (!selectedCustomer) return
+        startTransition(async () => {
+            const result = await deleteCustomer(selectedCustomer.id)
+            if (result.success) {
+                setCustomers((prev) => prev.filter((c) => c.id !== selectedCustomer.id))
+                setIsDeleteDialogOpen(false)
+                setSelectedCustomer(null)
+            } else {
+                alert(result.error)
+            }
+        })
+    }
+
+    // 4. Record Payment
+    const handleRecordPayment = async (amount: number): Promise<boolean> => {
+        if (!selectedCustomer) return false
+
+        // Dummy values pass karala thiyenne - authentication system ekan real user/branch IDs align karagන්න
+        const dummyBranchId = "branch-1"
+        const dummyUserId = "user-1"
+
+        const result = await recordCreditPayment(
+            selectedCustomer.id,
+            amount,
+            dummyBranchId,
+            dummyUserId
+        )
+
+        if (result.success) {
+            setCustomers((prev) =>
+                prev.map((c) => (c.id === selectedCustomer.id ? result.data : c))
+            )
+            return true
+        } else {
+            alert(result.error)
+            return false
         }
     }
 
@@ -90,15 +159,15 @@ export default function CustomersClientPage() {
             {/* Content Area */}
             <div className="space-y-8">
                 {stats.debtorCount > 0 && (
-                    <QuickReachSection customers={customers.filter(c => c.totalDue > 0).slice(0, 5)} />
+                    <QuickReachSection
+                        customers={customers.filter((c) => Number(c.totalDue) > 0).slice(0, 5)}
+                    />
                 )}
 
                 {/* Responsive Search & Filter Section */}
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-4">
                     <div className="flex-1">
-                        <label className="text-xs font-semibold text-muted-foreground">
-                            Search
-                        </label>
+                        <label className="text-xs font-semibold text-muted-foreground">Search</label>
                         <div className="relative mt-1">
                             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                             <input
@@ -128,11 +197,28 @@ export default function CustomersClientPage() {
                     </div>
                 </div>
 
-                <CustomerTable
-                    customers={filteredCustomers}
-                    onDelete={(c: Customer) => { setSelectedCustomer(c); setIsDeleteDialogOpen(true); }}
-                    onPayment={(c: Customer) => { setSelectedCustomer(c); setIsCreditDialogOpen(true); }}
-                />
+                {/* Loading Spinner or Customer Table */}
+                {isLoading ? (
+                    <div className="flex items-center justify-center p-12">
+                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                    </div>
+                ) : (
+                    <CustomerTable
+                        customers={filteredCustomers}
+                        onEdit={(c: any) => {
+                            setSelectedCustomer(c)
+                            setIsEditDialogOpen(true)
+                        }}
+                        onDelete={(c: any) => {
+                            setSelectedCustomer(c)
+                            setIsDeleteDialogOpen(true)
+                        }}
+                        onPayment={(c: any) => {
+                            setSelectedCustomer(c)
+                            setIsCreditDialogOpen(true)
+                        }}
+                    />
+                )}
             </div>
 
             {/* Dialogs */}
@@ -142,11 +228,19 @@ export default function CustomersClientPage() {
                 onAdd={handleAddCustomer}
             />
 
+            <EditCustomerDialog
+                open={isEditDialogOpen}
+                onOpenChange={setIsEditDialogOpen}
+                customer={selectedCustomer}
+                onUpdate={handleEditCustomer}
+            />
+
             <DeleteCustomerDialog
                 open={isDeleteDialogOpen}
                 onOpenChange={setIsDeleteDialogOpen}
                 customer={selectedCustomer}
                 onConfirm={handleDelete}
+                isPending={isPending}
             />
 
             <CreditPaymentDialog
