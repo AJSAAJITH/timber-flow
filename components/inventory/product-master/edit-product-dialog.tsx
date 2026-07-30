@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState } from "react"
+import React, { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
@@ -11,36 +11,51 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog"
 import { Category } from "@prisma/client"
-
 import { Loader2 } from "lucide-react"
+import { ProductWithCategory } from "@/lib/types"
 import { ProductInput, productSchema } from "@/lib/validations/product"
 
-interface CreateProductDialogProps {
+interface EditProductDialogProps {
+    product: ProductWithCategory | null
     isOpen: boolean
     onOpenChange: (open: boolean) => void
     categories: Category[]
-    onSubmit: (data: ProductInput) => Promise<boolean>
+    onSubmit: (id: string, data: ProductInput) => Promise<boolean>
 }
 
-export function CreateProductDialog({
+export function EditProductDialog({
+    product,
     isOpen,
     onOpenChange,
     categories,
     onSubmit,
-}: CreateProductDialogProps) {
+}: EditProductDialogProps) {
     const [formData, setFormData] = useState<ProductInput>({
         name: "",
         sku: "",
-        categoryId: categories[0]?.id || "",
+        categoryId: "",
         unitPrice: 0,
     })
     const [errors, setErrors] = useState<Record<string, string>>({})
     const [loading, setLoading] = useState(false)
 
-    const handleSubmit = async () => {
-        setErrors({})
-        const result = productSchema.safeParse(formData)
+    useEffect(() => {
+        if (product) {
+            setFormData({
+                name: product.name,
+                sku: product.sku || "",
+                categoryId: product.categoryId,
+                unitPrice: product.unitPrice,
+            })
+            setErrors({})
+        }
+    }, [product])
 
+    const handleSubmit = async () => {
+        if (!product) return
+        setErrors({})
+
+        const result = productSchema.safeParse(formData)
         if (!result.success) {
             const fieldErrors: Record<string, string> = {}
             result.error.issues.forEach((issue) => {
@@ -53,16 +68,10 @@ export function CreateProductDialog({
         }
 
         setLoading(true)
-        const success = await onSubmit(formData)
+        const success = await onSubmit(product.id, formData)
         setLoading(false)
 
         if (success) {
-            setFormData({
-                name: "",
-                sku: "",
-                categoryId: categories[0]?.id || "",
-                unitPrice: 0,
-            })
             onOpenChange(false)
         }
     }
@@ -71,8 +80,8 @@ export function CreateProductDialog({
         <Dialog open={isOpen} onOpenChange={onOpenChange}>
             <DialogContent className="sm:max-w-md">
                 <DialogHeader>
-                    <DialogTitle>Create Product</DialogTitle>
-                    <DialogDescription>Add a new product to your catalog</DialogDescription>
+                    <DialogTitle>Edit Product</DialogTitle>
+                    <DialogDescription>Update details for {product?.name}</DialogDescription>
                 </DialogHeader>
 
                 <div className="space-y-4">
@@ -82,7 +91,6 @@ export function CreateProductDialog({
                         </label>
                         <input
                             type="text"
-                            placeholder="e.g., Premium Wood Pallets"
                             value={formData.name}
                             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                             className="w-full mt-1 px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary"
@@ -94,7 +102,6 @@ export function CreateProductDialog({
                         <label className="text-sm font-medium text-foreground">SKU (Optional)</label>
                         <input
                             type="text"
-                            placeholder="e.g., WP-001"
                             value={formData.sku || ""}
                             onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
                             className="w-full mt-1 px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary"
@@ -126,7 +133,6 @@ export function CreateProductDialog({
                         </label>
                         <input
                             type="number"
-                            placeholder="0"
                             value={formData.unitPrice}
                             onChange={(e) =>
                                 setFormData({ ...formData, unitPrice: parseFloat(e.target.value) || 0 })
@@ -145,7 +151,7 @@ export function CreateProductDialog({
                     </Button>
                     <Button onClick={handleSubmit} disabled={loading}>
                         {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        Create Product
+                        Save Changes
                     </Button>
                 </DialogFooter>
             </DialogContent>

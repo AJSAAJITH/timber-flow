@@ -1,12 +1,14 @@
+// components/dashboard/navbar.tsx
 "use client"
 
 import React, { useEffect } from "react"
 import { Menu, X, ChevronDown, LogOut } from "lucide-react"
 import { useSidebar } from "@/components/ui/sidebar"
 import { useAuth } from "@/lib/auth-context"
-import { useClerk } from "@clerk/nextjs" // 👈 Clerk logout එක සඳහා මේක ගන්න
+import { useClerk } from "@clerk/nextjs"
 import { useRouter } from "next/navigation"
 import { ModeToggle } from "../ModeToggle"
+import { BranchSwitcher } from "./branch-switcher" // 👈 1. Branch Switcher එක Import කරගන්නා ලදී
 
 interface NavbarProps {
     branchName?: string
@@ -15,9 +17,9 @@ interface NavbarProps {
 
 export function Navbar({ branchName, onMenuToggle }: NavbarProps) {
     const { open: isOpen, setOpen: setIsOpen } = useSidebar();
-    const { user, isLoading } = useAuth(); // 👈 isLoading එකත් ගත්තා
+    const { user, isLoading } = useAuth();
     const [showUserMenu, setShowUserMenu] = React.useState(false);
-    const { signOut } = useClerk(); // 👈 Clerk sign out function එක
+    const { signOut } = useClerk();
     const router = useRouter();
 
     const handleToggleSidebar = () => {
@@ -27,8 +29,8 @@ export function Navbar({ branchName, onMenuToggle }: NavbarProps) {
 
     const handleLogout = async () => {
         setShowUserMenu(false);
-        await signOut(); // 👈 සැබෑවටම Clerk එකෙන් ලොග් අවුට් කරයි
-        router.push("/sign-in"); // ලොග් අවුට් වුනාට පස්සේ සයින්-ඉන් පිටුවට යවයි
+        await signOut();
+        router.push("/sign-in");
     }
 
     const getRoleDisplay = (role: string) => {
@@ -40,7 +42,6 @@ export function Navbar({ branchName, onMenuToggle }: NavbarProps) {
         return roleMap[role] || role
     }
 
-    // ඩේටා ලෝඩ් වෙනකම් Skeleton එකක් හෝ හිස් තැනක් තැබීම
     if (isLoading) {
         return <div className="h-16 border-b border-border bg-card animate-pulse" />
     }
@@ -50,7 +51,7 @@ export function Navbar({ branchName, onMenuToggle }: NavbarProps) {
     }, [user]);
 
     return (
-        <nav className="flex h-16 items-center justify-between border-b border-border bg-card px-4 shadow-sm md:px-6">
+        <nav className="flex h-16 items-center justify-between border-b border-border bg-card px-4 shadow-sm md:px-6 z-30">
             {/* Left section: Logo and Menu Button */}
             <div className="flex items-center gap-4">
                 <button
@@ -66,24 +67,18 @@ export function Navbar({ branchName, onMenuToggle }: NavbarProps) {
                         T
                     </div>
                     <div className="hidden sm:block">
-                        <h1 className="text-lg font-bold text-foreground">TimberFlow</h1>
-                        {user?.branch?.name && (
-                            <p className="text-xs text-muted-foreground">{user.branch.name}</p>
-                        )}
+                        <h1 className="text-lg font-bold text-foreground leading-tight">TimberFlow</h1>
+                        <p className="text-xs text-muted-foreground">
+                            {user?.branch?.name || branchName || "ERP System"}
+                        </p>
                     </div>
                 </div>
             </div>
 
-            {/* Right section: Theme Toggle & User Menu */}
-            <div className="flex items-center gap-3 md:gap-4">
-                {user?.branch?.name && (
-                    <div className="hidden lg:flex flex-col items-end">
-                        <p className="text-sm font-medium text-foreground">{user.branch.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                            {user?.name || "User"}
-                        </p>
-                    </div>
-                )}
+            {/* Right section: Branch Switcher, Theme Toggle & User Menu */}
+            <div className="flex items-center gap-2 md:gap-4">
+                {/* 💡 2. Branch Switcher එක මෙතැනට එකතු කරන ලදී */}
+                <BranchSwitcher />
 
                 <ModeToggle />
 
@@ -123,7 +118,7 @@ export function Navbar({ branchName, onMenuToggle }: NavbarProps) {
                             </div>
                             <div className="p-2">
                                 <button
-                                    onClick={handleLogout} // 👈 අප්ඩේට් කරපු ලොග්අවුට් ෆන්ක්ෂන් එක
+                                    onClick={handleLogout}
                                     className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-destructive hover:bg-destructive/10"
                                 >
                                     <LogOut className="h-4 w-4" />
@@ -135,6 +130,7 @@ export function Navbar({ branchName, onMenuToggle }: NavbarProps) {
                 </div>
             </div>
 
+            {/* Mobile Sidebar Overlay Backdrop */}
             {isOpen && (
                 <div
                     className="fixed inset-0 top-16 z-40 bg-black/50 md:hidden"

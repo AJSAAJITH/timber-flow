@@ -1,11 +1,17 @@
+import { InventoryLogType } from "@prisma/client"
+
 export interface User {
-    id: string
-    name: string
-    email: string
-    role: "SUPER_ADMIN" | "ADMIN" | "CASHIER"
-    branch: string
-    status: "active" | "blocked"
-    joinedDate: string
+    id: string;
+    clerkId?: string;
+    name: string;
+    email: string;
+    role: "SUPER_ADMIN" | "ADMIN" | "CASHIER";
+    branch?: {
+        id: string;
+        name: string;
+    }; // 💡 branch: string වෙනුවට Object එකක් ලෙස සකසන්න
+    status?: "active" | "blocked";
+    joinedDate?: string;
 }
 
 
@@ -24,21 +30,6 @@ export interface Customer {
     totalDue: number
     registeredDate: string
     lastTransaction?: string
-}
-
-
-
-// Types - invenroty
-export interface StockItem {
-    id: string
-    productId: string
-    productName: string
-    sku: string
-    category: string
-    currentStock: number
-    minStock: number
-    branch: string
-    lastUpdated: string
 }
 
 export interface Product {
@@ -60,12 +51,13 @@ export interface StockLog {
     timestamp: string
     branch: string
     product: string
-    logType: "STOCK_IN" | "STOCK_OUT" | "ADJUSTMENT" | "DAMAGE"
+    logType: InventoryLogType
     quantity: number
     note: string
 }
 
-// branch management
+////////////////////////////////////////////////////////////////
+// branch management - starting 
 export interface AssignedAdmin {
     id: string;
     name: string;
@@ -91,5 +83,43 @@ export interface UpdateBranchInput {
     name?: string;
     location?: string;
     adminUserId?: string | null;
+}
+
+// Product Type definition for Frontend
+export type ProductWithCategory = {
+    id: string
+    name: string
+    sku: string | null
+    categoryId: string
+    category: {
+        id: string
+        name: string
+    }
+    unitPrice: number
+    createdAt: Date
+    updatedAt: Date
+}
+
+// branch Stock management
+export interface StockItem {
+    id: string; // BranchInventory ID
+    productId: string;
+    productName: string;
+    sku: string;
+    categoryName?: string;
+    currentStock: number;
+    minStock: number;
+    branch?: string;
+}
+
+export interface BranchOption {
+    id: string;
+    name: string;
+}
+
+export interface CatalogProductOption {
+    id: string;
+    name: string;
+    sku: string;
 }
 

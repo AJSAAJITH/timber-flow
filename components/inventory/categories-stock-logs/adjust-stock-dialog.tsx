@@ -59,8 +59,8 @@ export function AdjustStockDialog({
                             <button
                                 onClick={() => setAdjustmentType("in")}
                                 className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${adjustmentType === "in"
-                                        ? "bg-green-600 text-white"
-                                        : "bg-secondary text-foreground hover:bg-secondary/80"
+                                    ? "bg-green-600 text-white"
+                                    : "bg-secondary text-foreground hover:bg-secondary/80"
                                     }`}
                             >
                                 Stock In
@@ -68,8 +68,8 @@ export function AdjustStockDialog({
                             <button
                                 onClick={() => setAdjustmentType("out")}
                                 className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${adjustmentType === "out"
-                                        ? "bg-red-600 text-white"
-                                        : "bg-secondary text-foreground hover:bg-secondary/80"
+                                    ? "bg-red-600 text-white"
+                                    : "bg-secondary text-foreground hover:bg-secondary/80"
                                     }`}
                             >
                                 Stock Out

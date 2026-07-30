@@ -1,3 +1,4 @@
+// components/inventory/categories-stock-logs/categories-stock-log-view.tsx
 "use client"
 
 import React, { useState } from "react"
@@ -26,15 +27,6 @@ export default function Ctgories_Stock_Logs({
     const [isAdjustDialogOpen, setIsAdjustDialogOpen] = useState(false)
     const [selectedStock, setSelectedStock] = useState<StockItem | null>(null)
 
-    // Handlers
-    const handleAddCategory = (categoryName: string) => {
-        const category: Category = {
-            id: `c${Date.now()}`,
-            name: categoryName,
-        }
-        setCategories([...categories, category])
-    }
-
     const handleAdjustStock = (qty: number, type: "in" | "out", note: string) => {
         if (!selectedStock) return
 
@@ -46,7 +38,7 @@ export default function Ctgories_Stock_Logs({
         setStockItems(
             stockItems.map((item) =>
                 item.id === selectedStock.id
-                    ? { ...item, currentStock: newQty, lastUpdated: new Date().toISOString().split("T")[0] }
+                    ? { ...item, currentStock: newQty }
                     : item
             )
         )
@@ -54,7 +46,7 @@ export default function Ctgories_Stock_Logs({
         const logEntry: StockLog = {
             id: Date.now().toString(),
             timestamp: new Date().toLocaleString(),
-            branch: selectedStock.branch,
+            branch: selectedStock.branch || "Main Branch", // Safe fallback logic
             product: selectedStock.productName,
             logType: type === "in" ? "STOCK_IN" : "ADJUSTMENT",
             quantity: type === "in" ? qty : -qty,
@@ -64,13 +56,13 @@ export default function Ctgories_Stock_Logs({
     }
 
     return (
-        <div>
+        <div className="space-y-6">
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
                 {/* Category Management */}
                 <div className="lg:col-span-1">
                     <CategoryManager
                         categories={categories}
-                        onAddCategory={handleAddCategory}
+                        setCategories={setCategories}
                     />
                 </div>
 

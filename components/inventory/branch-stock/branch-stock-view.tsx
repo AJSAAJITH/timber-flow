@@ -1,115 +1,226 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import { LowStockAlert } from "./low-stock-alert";
-import { StockControls } from "./stock-controls";
-import { MobileStockList } from "./mobile-stock-list";
-import { DesktopStockTable } from "./desktop-stock-table";
-import { AdjustStockDialog } from "./adjust-stock-dialog";
-import { TabsContent } from "@/components/ui/tabs";
-import { MOCK_STOCK } from "@/lib/constants";
+import { useState, useEffect, useTransition } from "react";
+import { RefreshCw } from "lucide-react";
+import { BranchOption, CatalogProductOption, StockItem } from "@/lib/types";
+import {
+    addStockToBranch,
+    adjustStock,
+    deleteBranchInventory,
+    getBranchInventory
+} from "@/actions/inventory/brach-stock.action";
 
+import DesktopStockTable from "@/components/inventory/branch-stock/desktop-stock-table";
+import { AddStockDialog } from "@/components/inventory/branch-stock/add-stock-dialog";
+import { AdjustStockDialog, InventoryLogType } from "@/components/inventory/branch-stock/adjust-stock-dialog";
+import { AddStockActionHeader } from "@/components/inventory/branch-stock/add-stock-action-header";
 
-export function BranchStockView() {
-    // 1. State definitions
-    const [stockItems, setStockItems] = useState(MOCK_STOCK);
-    const [searchQueryStock, setSearchQueryStock] = useState("");
-    const [selectedBranch, setSelectedBranch] = useState("Main Branch");
+interface BranchStockViewProps {
+    branches: BranchOption[];
+    catalogProducts: CatalogProductOption[];
+    currentUserId: string;
+}
 
-    // Dialog state
-    const [isAdjustDialogOpen, setIsAdjustDialogOpen] = useState(false);
-    const [selectedStock, setSelectedStock] = useState<any>(null);
-    const [adjustmentType, setAdjustmentType] = useState<"in" | "out">("in");
-    const [adjustmentQty, setAdjustmentQty] = useState("");
-    const [adjustmentNote, setAdjustmentNote] = useState("");
-
-    // 2. Filters (Logic)
-    const filteredStockItems = useMemo(() => {
-        return stockItems.filter((item) => {
-            const matchesSearch =
-                item.productName.toLowerCase().includes(searchQueryStock.toLowerCase()) ||
-                item.sku.toLowerCase().includes(searchQueryStock.toLowerCase());
-            const matchesBranch = item.branch === selectedBranch;
-            return matchesSearch && matchesBranch;
-        });
-    }, [searchQueryStock, selectedBranch, stockItems]);
-
-    const lowStockItems = useMemo(() =>
-        filteredStockItems.filter((item) => item.currentStock <= item.minStock),
-        [filteredStockItems]
+export default function BranchStockView({
+    branches,
+    catalogProducts,
+    currentUserId,
+}: BranchStockViewProps) {
+    const [selectedBranchId, setSelectedBranchId] = useState<string>(
+        branches[0]?.id || ""
     );
+    const [stockItems, setStockItems] = useState<StockItem[]>([]);
+    const [isPending, startTransition] = useTransition();
+    const [message, setMessage] = useState<{ text: string; isError?: boolean } | null>(null);
 
-    // 3. Handler function
-    const handleAdjustStock = () => {
-        if (!selectedStock || !adjustmentQty) return;
+    // Modals state
+    const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+    const [isAdjustModalOpen, setIsAdjustModalOpen] = useState(false);
+    const [selectedItemForAdjust, setSelectedItemForAdjust] = useState<StockItem | null>(null);
 
-        const qty = parseInt(adjustmentQty);
-        const newQty = adjustmentType === "in"
-            ? selectedStock.currentStock + qty
-            : Math.max(0, selectedStock.currentStock - qty);
+    // Adjust Form state (Updated to support all Prisma Enum types)
+    const [adjustForm, setAdjustForm] = useState<{
+        type: InventoryLogType;
+        quantity: number;
+        reason: string;
+    }>({
+        type: "STOCK_IN",
+        quantity: 0,
+        reason: "",
+    });
 
-        setStockItems(stockItems.map((item) =>
-            item.id === selectedStock.id
-                ? { ...item, currentStock: newQty }
-                : item
-        ));
-
-        setIsAdjustDialogOpen(false);
-        setAdjustmentQty("");
-        setAdjustmentNote("");
+    // Fetch Stock Items when Branch changes
+    const fetchInventory = (branchId: string) => {
+        if (!branchId) return;
+        startTransition(async () => {
+            const res = await getBranchInventory(branchId);
+            if (res.success && res.data) {
+                setStockItems(res.data);
+            } else {
+                setMessage({
+                    text: !res.success ? res.error : "දත්ත ලබා ගැනීමට නොහැකි විය.",
+                    isError: true,
+                });
+            }
+        });
     };
 
-    // 2. ඔයා අලුතින් හදපු stock helpers
-    const getStockStatus = (current: number, min: number): string => {
-        if (current === 0) return "Out of Stock";
-        if (current <= min) return "Low Stock";
-        return "In Stock";
+    useEffect(() => {
+        if (selectedBranchId) {
+            fetchInventory(selectedBranchId);
+        }
+    }, [selectedBranchId]);
+
+    // Handle Add Stock Confirmation
+    const handleAddStockConfirm = async (data: {
+        branch: string;
+        productId: string;
+        quantity: number;
+        minStock: number;
+    }) => {
+        setMessage(null);
+        const targetBranchId = branches.find((b) => b.name === data.branch)?.id || selectedBranchId;
+
+        const res = await addStockToBranch({
+            branchId: targetBranchId,
+            productId: data.productId,
+            quantity: Number(data.quantity),
+            minStock: Number(data.minStock),
+            userId: currentUserId,
+        });
+
+        if (res.success) {
+            setMessage({ text: res.message || "සාර්ථකව එකතු කරන ලදී!" });
+            fetchInventory(selectedBranchId);
+        } else {
+            setMessage({ text: res.error || "දෝෂයක් සිදු විය.", isError: true });
+        }
     };
 
-    const getStockStatusColor = (current: number, min: number): string => {
-        if (current === 0) return "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300";
-        if (current <= min) return "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300";
-        return "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300";
+    // Handle Adjust Stock
+    const handleAdjustStockSubmit = async (e?: React.FormEvent) => {
+        if (e) e.preventDefault();
+        if (!selectedItemForAdjust) return;
+
+        setMessage(null);
+        const res = await adjustStock({
+            inventoryId: selectedItemForAdjust.id,
+            type: adjustForm.type,
+            quantity: Number(adjustForm.quantity),
+            reason: adjustForm.reason,
+            userId: currentUserId,
+        });
+
+        if (res.success) {
+            setMessage({ text: res.message || "Stock Adjust කිරීම සාර්ථකයි!" });
+            setIsAdjustModalOpen(false);
+            setSelectedItemForAdjust(null);
+            setAdjustForm({ type: "STOCK_IN", quantity: 0, reason: "" });
+            fetchInventory(selectedBranchId);
+        } else {
+            setMessage({ text: res.error || "දෝෂයක් සිදු විය.", isError: true });
+        }
+    };
+
+    // Handle Delete Stock
+    const handleDeleteStock = async (inventoryId: string) => {
+        if (!confirm("මෙම Product එක මෙම Branch එකෙන් ඉවත් කිරීමට ඔබට විශ්වාසද?")) return;
+
+        setMessage(null);
+        const res = await deleteBranchInventory(inventoryId);
+        if (res.success) {
+            setMessage({ text: res.message || "ඉවත් කිරීම සාර්ථකයි!" });
+            fetchInventory(selectedBranchId);
+        } else {
+            setMessage({ text: res.error || "ඉවත් කිරීමට නොහැකි විය.", isError: true });
+        }
     };
 
     return (
-        <TabsContent value="stock" className="space-y-6 mt-6">
-            <LowStockAlert count={lowStockItems.length} />
+        <div className="space-y-4 animate-in fade-in-50 duration-200">
+            {/* Message Banner */}
+            {message && (
+                <div
+                    className={`p-3 rounded-lg text-sm font-medium border transition-all ${message.isError
+                            ? "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/50 dark:text-red-300 dark:border-red-900"
+                            : "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-900"
+                        }`}
+                >
+                    {message.text}
+                </div>
+            )}
 
-            <StockControls
-                searchQuery={searchQueryStock}
-                onSearchChange={setSearchQueryStock}
-                selectedBranch={selectedBranch}
-                onBranchChange={setSelectedBranch}
-                branches={["Main Branch", "Negombo Branch", "Galle Branch", "Kandy Branch"]}
-            />
+            <AddStockActionHeader onOpenAddModal={() => setIsAddModalOpen(true)} />
 
-            <MobileStockList
-                items={filteredStockItems}
-                onAdjust={(item: any) => { setSelectedStock(item); setIsAdjustDialogOpen(true); }}
-                getStatus={getStockStatus}
-                getColor={getStockStatusColor}
-            />
+            {/* Branch Selector Bar */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 bg-card p-4 rounded-xl border">
+                <div className="flex items-center gap-3">
+                    <label className="text-sm font-medium whitespace-nowrap">Select Branch:</label>
+                    <select
+                        value={selectedBranchId}
+                        onChange={(e) => setSelectedBranchId(e.target.value)}
+                        className="border rounded-md px-3 py-1.5 text-sm bg-background font-medium focus:outline-none focus:ring-2 focus:ring-primary"
+                    >
+                        {branches.map((b) => (
+                            <option key={b.id} value={b.id}>
+                                {b.name}
+                            </option>
+                        ))}
+                    </select>
 
+                    <button
+                        onClick={() => fetchInventory(selectedBranchId)}
+                        className="p-2 text-muted-foreground hover:text-foreground transition rounded border hover:bg-muted"
+                        title="Refresh Stock"
+                    >
+                        <RefreshCw className={`w-4 h-4 ${isPending ? "animate-spin" : ""}`} />
+                    </button>
+                </div>
+            </div>
+
+            {/* Stock Table */}
             <DesktopStockTable
-                items={filteredStockItems}
-                onAdjust={(item: any) => { setSelectedStock(item); setIsAdjustDialogOpen(true); }}
-                getStatus={getStockStatus}
-                getColor={getStockStatusColor}
+                items={stockItems}
+                isLoading={isPending}
+                onAdjustStock={(item) => {
+                    setSelectedItemForAdjust(item);
+                    setIsAdjustModalOpen(true);
+                }}
+                onDeleteStock={handleDeleteStock}
             />
 
-            <AdjustStockDialog
-                isOpen={isAdjustDialogOpen}
-                onClose={() => setIsAdjustDialogOpen(false)}
-                item={selectedStock}
-                type={adjustmentType}
-                setType={setAdjustmentType}
-                qty={adjustmentQty}
-                setQty={setAdjustmentQty}
-                note={adjustmentNote}
-                setNote={setAdjustmentNote}
-                onConfirm={handleAdjustStock}
+            {/* MODAL 1: ADD STOCK DIALOG */}
+            <AddStockDialog
+                isOpen={isAddModalOpen}
+                onClose={() => setIsAddModalOpen(false)}
+                branches={branches.map((b) => b.name)}
+                products={catalogProducts}
+                onConfirm={handleAddStockConfirm}
             />
-        </TabsContent>
+
+            {/* MODAL 2: ADJUST STOCK DIALOG */}
+            {isAdjustModalOpen && selectedItemForAdjust && (
+                <AdjustStockDialog
+                    isOpen={isAdjustModalOpen}
+                    onClose={() => {
+                        setIsAdjustModalOpen(false);
+                        setSelectedItemForAdjust(null);
+                    }}
+                    item={selectedItemForAdjust}
+                    type={adjustForm.type}
+                    setType={(type) =>
+                        setAdjustForm((prev) => ({
+                            ...prev,
+                            type: type,
+                        }))
+                    }
+                    qty={String(adjustForm.quantity)}
+                    setQty={(q) => setAdjustForm((prev) => ({ ...prev, quantity: Number(q) }))}
+                    note={adjustForm.reason}
+                    setNote={(n) => setAdjustForm((prev) => ({ ...prev, reason: n }))}
+                    onConfirm={handleAdjustStockSubmit}
+                />
+            )}
+        </div>
     );
 }

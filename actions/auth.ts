@@ -1,47 +1,48 @@
+// actions/auth.ts
 "use server";
 
 import prisma from "@/lib/prisma";
 import { currentUser } from "@clerk/nextjs/server";
 
-export type UserRole = "SUPER_ADMIN" | "ADMIN" | "CASHIER";
+export interface AuthUser {
+    id: string;
+    clerkId: string;
+    name: string;
+    email: string;
+    role: "SUPER_ADMIN" | "ADMIN" | "CASHIER";
+    branch?: {
+        id: string;
+        name: string;
+    };
+}
 
-export async function getAuthenticatedUser() {
+export async function getAuthenticatedUser(): Promise<AuthUser | null> {
     try {
         const clerkUser = await currentUser();
+        if (!clerkUser) return null;
 
-        if (!clerkUser) {
-            return null;
-        }
-
-        // ඩේටාබේස් එකෙන් යූසර්ව සර්ච් කිරීම (Read Only)
         const dbUser = await prisma.user.findUnique({
-            where: {
-                clerkId: clerkUser.id,
-            },
+            where: { clerkId: clerkUser.id },
             include: {
                 branches: {
-                    select: {
-                        id: true,
-                        name: true,
-                    },
+                    select: { id: true, name: true },
+                    take: 1,
                 },
             },
         });
 
-        // DB එකේ යූසර් නැත්නම් හෝ Block කරලා නම් Access නෑ
-        if (!dbUser || dbUser.isBlocked) {
-            return null;
-        }
+        if (!dbUser) return null;
 
         return {
             id: dbUser.id,
+            clerkId: dbUser.clerkId,
             name: dbUser.name,
             email: dbUser.email,
-            role: dbUser.role as UserRole,
-            branches: dbUser.branches, // dbUser.branch වෙනුවට array එකක් ලෙස branches ලබා දීම
+            role: dbUser.role,
+            branch: dbUser.branches[0] || undefined,
         };
     } catch (error) {
-        console.error("Error in getAuthenticatedUser server action:", error);
+        console.error("Auth fetch error:", error);
         return null;
     }
 }

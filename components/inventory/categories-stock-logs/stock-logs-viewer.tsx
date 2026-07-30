@@ -41,8 +41,10 @@ export function StockLogsViewer({ logs }: StockLogsViewerProps) {
                                 <p className="font-medium text-foreground truncate">{log.product}</p>
                                 <p className="text-xs text-muted-foreground">{log.timestamp}</p>
                             </div>
+                           // StockLogsViewer.tsx හි Badge කොටස සඳහා Refactor එකක්:
+
                             <span
-                                className={`inline-block px-2 py-1 rounded text-xs font-medium whitespace-nowrap ${log.logType === "STOCK_IN"
+                                className={`inline-block px-2 py-1 rounded text-xs font-medium whitespace-nowrap ${log.logType === "STOCK_IN" || log.logType === "RETURN"
                                         ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300"
                                         : log.logType === "STOCK_OUT" || log.logType === "DAMAGE"
                                             ? "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300"
@@ -53,6 +55,12 @@ export function StockLogsViewer({ logs }: StockLogsViewerProps) {
                                     <>
                                         <ArrowUpRight className="h-3 w-3 inline mr-1" />
                                         STOCK IN
+                                    </>
+                                )}
+                                {log.logType === "RETURN" && (
+                                    <>
+                                        <ArrowUpRight className="h-3 w-3 inline mr-1" />
+                                        RETURN
                                     </>
                                 )}
                                 {log.logType === "STOCK_OUT" && (
@@ -85,8 +93,8 @@ export function StockLogsViewer({ logs }: StockLogsViewerProps) {
                                 <p className="text-muted-foreground">Quantity</p>
                                 <p
                                     className={`font-bold ${log.quantity > 0
-                                            ? "text-green-600 dark:text-green-400"
-                                            : "text-red-600 dark:text-red-400"
+                                        ? "text-green-600 dark:text-green-400"
+                                        : "text-red-600 dark:text-red-400"
                                         }`}
                                 >
                                     {log.quantity > 0 ? "+" : ""}{log.quantity}
