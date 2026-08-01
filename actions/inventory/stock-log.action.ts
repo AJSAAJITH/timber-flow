@@ -1,4 +1,3 @@
-// src/actions/inventory/stock-log.action.ts
 "use server";
 
 import prisma from "@/lib/prisma";
@@ -14,23 +13,24 @@ export async function getStockLogs(): Promise<ActionResult<StockLog[]>> {
             },
             take: 100, // Performance සඳහා ලොග් 100 කට සීමා කර ඇත
             include: {
-                branch: true,   // InventoryLog -> Branch direct relation
-                product: true,  // InventoryLog -> Product direct relation
+                branch: true,   // InventoryLog -> Branch relation
+                product: true,  // InventoryLog -> Product relation
             },
         });
 
         // Prisma Data එක UI එකේ StockLog Type එකට Map කිරීම
         const formattedLogs: StockLog[] = logs.map((log) => ({
             id: log.id,
+            branchId: log.branchId, // 💡 branchId එක Direct ලෙස UI එකට Pass කරන ලදී
             product: log.product?.name || "Unknown Product",
             branch: log.branch?.name || "Unknown Branch",
-            quantity: log.quantity, // changeQty වෙනුවට quantity
+            quantity: log.quantity,
             logType: log.type as StockLog["logType"],
             timestamp: new Date(log.createdAt).toLocaleString("en-US", {
                 dateStyle: "medium",
                 timeStyle: "short",
             }),
-            note: log.note || "", // reason වෙනුවට note
+            note: log.note || "",
         }));
 
         return actionSuccess(formattedLogs);

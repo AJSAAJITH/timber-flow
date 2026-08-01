@@ -3,6 +3,7 @@
 import { useState, useEffect, useTransition } from "react";
 import { RefreshCw } from "lucide-react";
 import { BranchOption, CatalogProductOption, StockItem } from "@/lib/types";
+import { useBranch } from "@/lib/branch-context"; // 💡 Branch Context එක Import කරන ලදී
 import {
     addStockToBranch,
     adjustStock,
@@ -26,9 +27,18 @@ export default function BranchStockView({
     catalogProducts,
     currentUserId,
 }: BranchStockViewProps) {
-    const [selectedBranchId, setSelectedBranchId] = useState<string>(
-        branches[0]?.id || ""
-    );
+    // 💡 BranchContext මගින් User Data ලබාගැනීම
+    const { user } = useBranch();
+    const isSuperAdmin = user?.role === "SUPER_ADMIN";
+
+    // 💡 SUPER_ADMIN නොවේ නම් User ගේ තමන්ගේ Branch ID එක Default ලෙස set කරයි
+    const [selectedBranchId, setSelectedBranchId] = useState<string>(() => {
+        if (!isSuperAdmin && user?.branch?.id) {
+            return user.branch.id;
+        }
+        return branches[0]?.id || "";
+    });
+
     const [stockItems, setStockItems] = useState<StockItem[]>([]);
     const [isPending, startTransition] = useTransition();
     const [message, setMessage] = useState<{ text: string; isError?: boolean } | null>(null);
@@ -38,7 +48,7 @@ export default function BranchStockView({
     const [isAdjustModalOpen, setIsAdjustModalOpen] = useState(false);
     const [selectedItemForAdjust, setSelectedItemForAdjust] = useState<StockItem | null>(null);
 
-    // Adjust Form state (Updated to support all Prisma Enum types)
+    // Adjust Form state
     const [adjustForm, setAdjustForm] = useState<{
         type: InventoryLogType;
         quantity: number;
@@ -48,6 +58,24 @@ export default function BranchStockView({
         quantity: 0,
         reason: "",
     });
+
+    // 💡 Non-SUPER_ADMIN පරිශීලකයින් සඳහා ඔවුන්ගේ අදාළ Branch ID එක lock කිරීම
+    useEffect(() => {
+        if (!isSuperAdmin && user?.branch?.id) {
+            setSelectedBranchId(user.branch.id);
+        }
+    }, [isSuperAdmin, user?.branch?.id]);
+
+    // Message එක තත්පර 5කින් auto disappear වන ලෙස සැකසූ useEffect එක
+    useEffect(() => {
+        if (message) {
+            const timer = setTimeout(() => {
+                setMessage(null);
+            }, 5000);
+
+            return () => clearTimeout(timer);
+        }
+    }, [message]);
 
     // Fetch Stock Items when Branch changes
     const fetchInventory = (branchId: string) => {
@@ -156,10 +184,14 @@ export default function BranchStockView({
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 bg-card p-4 rounded-xl border">
                 <div className="flex items-center gap-3">
                     <label className="text-sm font-medium whitespace-nowrap">Select Branch:</label>
+
+                    {/* 🔴 Select Dropdown - Super Admin නොවන අයට disabled කර ඇත */}
                     <select
                         value={selectedBranchId}
                         onChange={(e) => setSelectedBranchId(e.target.value)}
-                        className="border rounded-md px-3 py-1.5 text-sm bg-background font-medium focus:outline-none focus:ring-2 focus:ring-primary"
+                        disabled={!isSuperAdmin}
+                        className={`border rounded-md px-3 py-1.5 text-sm bg-background font-medium focus:outline-none focus:ring-2 focus:ring-primary ${!isSuperAdmin ? "opacity-70 cursor-not-allowed bg-muted" : ""
+                            }`}
                     >
                         {branches.map((b) => (
                             <option key={b.id} value={b.id}>
@@ -176,6 +208,13 @@ export default function BranchStockView({
                         <RefreshCw className={`w-4 h-4 ${isPending ? "animate-spin" : ""}`} />
                     </button>
                 </div>
+
+                {/* 💡 SUPER_ADMIN නොවන විට කුඩා Badge එකක් පෙන්වීමට (Optional UI UX Improvement) */}
+                {!isSuperAdmin && (
+                    <span className="text-xs text-muted-foreground bg-muted px-2.5 py-1 rounded-full w-fit">
+                        Locked to your assigned branch
+                    </span>
+                )}
             </div>
 
             {/* Stock Table */}

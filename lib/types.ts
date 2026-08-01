@@ -47,13 +47,14 @@ export interface Category {
 }
 
 export interface StockLog {
-    id: string
-    timestamp: string
-    branch: string
-    product: string
-    logType: InventoryLogType
-    quantity: number
-    note: string
+    id: string;
+    branchId: string; // 💡 branchId එක මෙතැනට එක් කරන්න
+    product: string;
+    branch: string;
+    quantity: number;
+    logType: "STOCK_IN" | "STOCK_OUT" | "ADJUSTMENT" | "RETURN" | "DAMAGE";
+    timestamp: string;
+    note?: string;
 }
 
 ////////////////////////////////////////////////////////////////

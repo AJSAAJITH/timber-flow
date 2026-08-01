@@ -1,82 +1,92 @@
 "use client"
 
-import React from "react"
+import React, { useState } from "react"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
     DialogContent,
+    DialogDescription,
     DialogHeader,
     DialogTitle,
     DialogFooter,
 } from "@/components/ui/dialog"
-import { AlertCircle } from "lucide-react"
+import { Loader2 } from "lucide-react"
 
-interface CheckoutConfirmationDialogProps {
+interface NewCustomerDialogProps {
     isOpen: boolean
     onOpenChange: (open: boolean) => void
-    calculations: {
-        subtotal: number
-        finalTotal: number
-        totalDiscount: number
-    }
-    selectedPayment: string
-    isWalkIn: boolean
-    canCheckout: boolean
-    onConfirmCheckout: () => void
+    customerData: { name: string; phone: string }
+    onCustomerDataChange: (data: { name: string; phone: string }) => void
+    onSubmit: () => Promise<void> | void
 }
 
-export function CheckoutConfirmationDialog({
+export function NewCustomerDialog({
     isOpen,
     onOpenChange,
-    calculations,
-    selectedPayment,
-    isWalkIn,
-    canCheckout,
-    onConfirmCheckout,
-}: CheckoutConfirmationDialogProps) {
+    customerData,
+    onCustomerDataChange,
+    onSubmit,
+}: NewCustomerDialogProps) {
+    const [isSaving, setIsSaving] = useState(false)
+
+    const handleSubmit = async () => {
+        setIsSaving(true)
+        try {
+            await onSubmit()
+        } finally {
+            setIsSaving(false)
+        }
+    }
+
+    const isFormValid = customerData.name.trim() !== "" && customerData.phone.trim() !== ""
+
     return (
         <Dialog open={isOpen} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-md">
+            <DialogContent className="sm:max-w-sm">
                 <DialogHeader>
-                    <DialogTitle>Review Order</DialogTitle>
+                    <DialogTitle>Register Customer</DialogTitle>
+                    <DialogDescription>Add a new customer quickly</DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4">
-                    <div className="space-y-2 text-sm">
-                        <div className="flex justify-between">
-                            <span>Subtotal:</span>
-                            <span>LKR {calculations.subtotal.toLocaleString()}</span>
-                        </div>
-                        {calculations.totalDiscount > 0 && (
-                            <div className="flex justify-between text-green-600 dark:text-green-400">
-                                <span>Total Discount:</span>
-                                <span>-LKR {calculations.totalDiscount.toLocaleString()}</span>
-                            </div>
-                        )}
-                        <div className="border-t border-border pt-2 flex justify-between font-bold text-base">
-                            <span>Total:</span>
-                            <span>LKR {calculations.finalTotal.toLocaleString()}</span>
-                        </div>
-                    </div>
-
-                    {selectedPayment === "Credit" && isWalkIn && (
-                        <div className="rounded-lg bg-amber-100 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-700 p-3 flex gap-2">
-                            <AlertCircle className="h-5 w-5 text-amber-700 dark:text-amber-300 shrink-0 mt-0.5" />
-                            <p className="text-sm text-amber-700 dark:text-amber-300">
-                                Registered Customer is required for Credit transactions.
-                            </p>
-                        </div>
-                    )}
+                    <input
+                        type="text"
+                        placeholder="Customer Name"
+                        value={customerData.name}
+                        onChange={(e) =>
+                            onCustomerDataChange({ ...customerData, name: e.target.value })
+                        }
+                        className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                    <input
+                        type="tel"
+                        placeholder="Phone Number"
+                        value={customerData.phone}
+                        onChange={(e) =>
+                            onCustomerDataChange({ ...customerData, phone: e.target.value })
+                        }
+                        className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
                 </div>
                 <DialogFooter>
-                    <Button variant="outline" onClick={() => onOpenChange(false)}>
-                        Continue Shopping
+                    <Button
+                        variant="outline"
+                        onClick={() => onOpenChange(false)}
+                        disabled={isSaving}
+                    >
+                        Cancel
                     </Button>
                     <Button
-                        onClick={onConfirmCheckout}
-                        disabled={!canCheckout}
-                        className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400"
+                        onClick={handleSubmit}
+                        disabled={!isFormValid || isSaving}
                     >
-                        Place Order & Print Invoice
+                        {isSaving ? (
+                            <>
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                Saving...
+                            </>
+                        ) : (
+                            "Add Customer"
+                        )}
                     </Button>
                 </DialogFooter>
             </DialogContent>

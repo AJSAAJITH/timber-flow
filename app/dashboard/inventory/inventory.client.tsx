@@ -54,8 +54,8 @@ export default function InventoryClientPage({
                 <button
                     onClick={() => setActiveTab("branch-stock")}
                     className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === "branch-stock"
-                            ? "border-primary text-primary"
-                            : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
+                        ? "border-primary text-primary"
+                        : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
                         }`}
                 >
                     <Building2 className="w-4 h-4" />
@@ -65,8 +65,8 @@ export default function InventoryClientPage({
                 <button
                     onClick={() => setActiveTab("products")}
                     className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === "products"
-                            ? "border-primary text-primary"
-                            : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
+                        ? "border-primary text-primary"
+                        : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
                         }`}
                 >
                     <Package className="w-4 h-4" />
@@ -76,8 +76,8 @@ export default function InventoryClientPage({
                 <button
                     onClick={() => setActiveTab("categories")}
                     className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === "categories"
-                            ? "border-primary text-primary"
-                            : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
+                        ? "border-primary text-primary"
+                        : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
                         }`}
                 >
                     <FolderTree className="w-4 h-4" />
@@ -87,8 +87,8 @@ export default function InventoryClientPage({
                 <button
                     onClick={() => setActiveTab("logs")}
                     className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === "logs"
-                            ? "border-primary text-primary"
-                            : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
+                        ? "border-primary text-primary"
+                        : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
                         }`}
                 >
                     <History className="w-4 h-4" />

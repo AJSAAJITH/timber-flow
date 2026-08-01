@@ -66,9 +66,11 @@ export async function getCatalogProducts(): Promise<ActionResult<CatalogProductO
 }
 
 // 3. Fetch Branch Inventory Data
-export async function getBranchInventory(branchId: string): Promise<ActionResult<StockItem[]>> {
+// actions/inventory.ts
+
+export async function getBranchInventory(branchId: string): Promise<ActionResult<(StockItem & { unitPrice: number })[]>> {
     try {
-        if (!branchId) return actionError("Branch ID එකක් තෝරන්න.", "VALIDATION_ERROR");
+        if (!branchId || branchId === "ALL") return actionError("Branch ID එකක් තෝරන්න.", "VALIDATION_ERROR");
 
         const inventory = await prisma.branchInventory.findMany({
             where: { branchId },
@@ -80,7 +82,7 @@ export async function getBranchInventory(branchId: string): Promise<ActionResult
             orderBy: { product: { name: "asc" } },
         });
 
-        const formattedData: StockItem[] = inventory.map((item) => ({
+        const formattedData = inventory.map((item) => ({
             id: item.id,
             productId: item.productId,
             productName: item.product.name,
@@ -88,6 +90,7 @@ export async function getBranchInventory(branchId: string): Promise<ActionResult
             categoryName: item.product.category?.name,
             currentStock: item.stockLevel,
             minStock: item.minStock,
+            unitPrice: item.product.unitPrice ? Number(item.product.unitPrice) : 0,
         }));
 
         return actionSuccess(formattedData);

@@ -1,5 +1,4 @@
-// POS
-// Types
+// POS Types
 export interface Product {
     id: string
     name: string
@@ -18,16 +17,19 @@ export interface CartItem {
     quantity: number
     isDiscounted: boolean
 }
+
+// Updated: phone properties matching DB optional/null state
 export interface Customer {
     id: string
     name: string
-    phone: string
+    phone?: string | null
 }
 
-/// Checkout and Payment
-// Cart & Checkout Component
+// Cart & Checkout Component Props
 export interface CartCheckoutProps {
     cart: CartItem[]
+    customers: Customer[]
+    paymentMethods: string[] | { id: string; name: string }[]
     calculations: { subtotal: number; finalTotal: number; totalDiscount: number; count: number }
     isWalkIn: boolean
     selectedPayment: string
@@ -35,7 +37,7 @@ export interface CartCheckoutProps {
     canCheckout: boolean
     onUpdateQuantity: (id: string, delta: number) => void
     onRemove: (id: string) => void
-    onUpdatePrice: (id: string, price: number) => void
+    onUpdatePrice?: (id: string, price: number) => void
     onToggleWalkIn: (isWalkIn: boolean) => void
     onSelectCustomer: (id: string | null) => void
     onSelectPayment: (method: string) => void
@@ -45,5 +47,6 @@ export interface CartCheckoutProps {
     editingPriceId?: string | null
     editingPrice?: string
     onStartEditPrice?: (id: string, price: number) => void
+    onEditingPriceChange?: (price: string) => void
     onStopEditPrice?: () => void
 }
