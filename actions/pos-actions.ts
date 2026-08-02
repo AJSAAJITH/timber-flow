@@ -30,10 +30,19 @@ export interface CheckoutPayload {
     userId: string; // Cashier / Admin ID
 }
 
+// Prisma Decimal එක Plain Number එකකට Convert කරන Helper Function එක (Null-Safe)
+function formatCustomer(customer: any) {
+    if (!customer) return null;
+    return {
+        ...customer,
+        totalDue: Number(customer.totalDue ?? 0),
+    };
+}
+
 /**
  * 1. Register a new customer
  */
-export async function createCustomerAction(data: CreateCustomerInput): Promise<ActionResult<Customer>> {
+export async function createCustomerAction(data: CreateCustomerInput): Promise<ActionResult<any>> {
     try {
         if (!data.name.trim() || !data.phone.trim()) {
             return actionError("Customer name and phone number are required.", "VALIDATION_ERROR");
@@ -46,7 +55,8 @@ export async function createCustomerAction(data: CreateCustomerInput): Promise<A
             },
         });
 
-        return actionSuccess(customer, "Customer registered successfully");
+        // UPDATE 1: Customer.totalDue Decimal එක Number එකකට Convert කරන ලදී
+        return actionSuccess(formatCustomer(customer), "Customer registered successfully");
     } catch (error: any) {
         console.error("Create Customer Error:", error);
         return actionError(error.message || "Failed to create customer.", "SERVER_ERROR");
@@ -183,6 +193,8 @@ export async function processPosCheckoutAction(payload: CheckoutPayload): Promis
             totalAmount: Number(sale.totalAmount),
             paidAmount: Number(sale.paidAmount),
             dueAmount: Number(sale.dueAmount),
+            // UPDATE 2: sale.customer හි ඇති totalDue Decimal එක Convert කරන ලදී
+            customer: sale.customer ? formatCustomer(sale.customer) : null,
             items: sale.items.map((item) => ({
                 ...item,
                 originalPrice: Number(item.originalPrice),

@@ -1,18 +1,17 @@
 "use server"
 
-
-
 import { customerSchema, paymentSchema, CustomerFormValues } from "@/lib/validations/customer"
 import { revalidatePath } from "next/cache"
 import prisma from "@/lib/prisma"
 import { ActionResult } from "@/lib/types/action-result"
 import { actionError, actionSuccess } from "@/lib/types/action-response"
 
-// Prisma Decimal එක Plain Number එකකට Convert කරන Helper Function එකක්
+// Prisma Decimal එක Plain Number එකකට Convert කරන Helper Function එක (Null-Safe)
 function formatCustomer(customer: any) {
+    if (!customer) return null
     return {
         ...customer,
-        totalDue: Number(customer.totalDue),
+        totalDue: Number(customer.totalDue ?? 0),
     }
 }
 
@@ -127,7 +126,7 @@ export async function recordCreditPayment(
     }
 
     try {
-        // 1. Valid Branch ekak thiyeda balanna (Dummy ID ekak thibunoth DB eke thiyෙන eka gannawa)
+        // 1. Valid Branch එකක් තිබේදැයි පරීක්ෂා කිරීම
         let validBranchId = branchId
         let validUserId = userId
 
@@ -140,7 +139,7 @@ export async function recordCreditPayment(
             validBranchId = fallbackBranch.id
         }
 
-        // 2. Valid User ekak thiyeda balanna
+        // 2. Valid User කෙනෙක් තිබේදැයි පරීක්ෂා කිරීම
         const userExists = await prisma.user.findUnique({ where: { id: userId } })
         if (!userExists) {
             const fallbackUser = await prisma.user.findFirst()
@@ -150,12 +149,13 @@ export async function recordCreditPayment(
             validUserId = fallbackUser.id
         }
 
-        // 3. Transaction eka maxWait & timeout settings ekka run kirima
+        // 3. Transaction එක run කිරීම
         const result = await prisma.$transaction(
             async (tx) => {
                 const customer = await tx.customer.findUnique({ where: { id: customerId } })
                 if (!customer) throw new Error("Customer not found")
 
+                // 3.1 Credit Payment Log එකක් සෑදීම
                 await tx.creditPaymentLog.create({
                     data: {
                         amountPaid,
@@ -166,6 +166,52 @@ export async function recordCreditPayment(
                     },
                 })
 
+                // 3.2 Customer ගේ නොපියවූ (Due) Sales ලබා ගැනීම (පරණම Sale එක මුලින්ම - FIFO)
+                const pendingSales = await tx.sale.findMany({
+                    where: {
+                        customerId: customerId,
+                        dueAmount: { gt: 0 },
+                    },
+                    orderBy: {
+                        createdAt: "asc", // Oldest sales first
+                    },
+                })
+
+                let remainingPayment = amountPaid
+
+                // 3.3 එක් එක් Sale එක සඳහා Payment එක Apply කිරීම
+                for (const sale of pendingSales) {
+                    if (remainingPayment <= 0) break
+
+                    const currentDue = Number(sale.dueAmount)
+                    const currentPaid = Number(sale.paidAmount)
+
+                    if (remainingPayment >= currentDue) {
+                        // Sale එක සම්පූර්ණයෙන්ම ගෙවා නිමයි (PAID)
+                        await tx.sale.update({
+                            where: { id: sale.id },
+                            data: {
+                                paidAmount: currentPaid + currentDue,
+                                dueAmount: 0,
+                                paymentStatus: "PAID",
+                            },
+                        })
+                        remainingPayment -= currentDue
+                    } else {
+                        // Sale එකෙන් කොටසක් පමණක් ගෙවයි (PARTIALLY_PAID)
+                        await tx.sale.update({
+                            where: { id: sale.id },
+                            data: {
+                                paidAmount: currentPaid + remainingPayment,
+                                dueAmount: currentDue - remainingPayment,
+                                paymentStatus: "PARTIALLY_PAID",
+                            },
+                        })
+                        remainingPayment = 0
+                    }
+                }
+
+                // 3.4 Customer ගේ totalDue column එක Update කිරීම
                 const newTotalDue = Math.max(0, Number(customer.totalDue) - amountPaid)
                 const updatedCustomer = await tx.customer.update({
                     where: { id: customerId },
@@ -175,12 +221,15 @@ export async function recordCreditPayment(
                 return updatedCustomer
             },
             {
-                maxWait: 5000, // Connection pool එකෙන් connection එකක් ලැබෙන තෙක් තත්පර 5ක් බලයි
-                timeout: 10000, // Transaction එක run වීමට තත්පර 10ක් ලබා දෙයි
+                maxWait: 5000,
+                timeout: 10000,
             }
         )
 
+        // 4. Client Pages revalidate කිරීම
         revalidatePath("/dashboard/customers")
+        revalidatePath("/dashboard/sales")
+
         return actionSuccess(formatCustomer(result), "Payment recorded successfully")
     } catch (error: any) {
         console.error("Record Payment Error:", error)
