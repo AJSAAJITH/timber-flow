@@ -1,5 +1,5 @@
 import React from "react";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
     Sheet,
@@ -11,13 +11,13 @@ import {
 import { ExpenseType, NewExpenseForm } from "../../types/finance";
 import { EXPENSE_TYPES } from "../../constants/finance";
 
-
 interface Props {
     isOpen: boolean;
     onOpenChange: (open: boolean) => void;
     newExpense: NewExpenseForm;
     setNewExpense: React.Dispatch<React.SetStateAction<NewExpenseForm>>;
     onSubmit: () => void;
+    isSubmitting?: boolean;
 }
 
 export const RecordExpenseSheet: React.FC<Props> = ({
@@ -26,6 +26,7 @@ export const RecordExpenseSheet: React.FC<Props> = ({
     newExpense,
     setNewExpense,
     onSubmit,
+    isSubmitting = false,
 }) => {
     return (
         <Sheet open={isOpen} onOpenChange={onOpenChange}>
@@ -101,10 +102,11 @@ export const RecordExpenseSheet: React.FC<Props> = ({
                 </div>
 
                 <SheetFooter className="border-t border-border pt-4 gap-2">
-                    <Button variant="outline" onClick={() => onOpenChange(false)}>
+                    <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
                         Cancel
                     </Button>
-                    <Button onClick={onSubmit} className="bg-green-600 hover:bg-green-700">
+                    <Button onClick={onSubmit} disabled={isSubmitting} className="bg-green-600 hover:bg-green-700">
+                        {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                         Submit Record
                     </Button>
                 </SheetFooter>

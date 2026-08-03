@@ -66,7 +66,7 @@ export const navigationItems: NavItem[] = [
         label: "Branch Management",
         href: "/dashboard/branches",
         icon: GitBranch,
-        requiredRoles: ["SUPER_ADMIN", "ADMIN"],
+        requiredRoles: ["SUPER_ADMIN"],
     },
     {
         label: "User Management",

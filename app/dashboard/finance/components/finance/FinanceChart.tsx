@@ -1,16 +1,17 @@
 import React from "react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
-import { CHART_DATA } from "../../constants/finance";
+import { ChartDataPoint } from "../../types/finance";
 import { formatCurrency } from "../../utils/finance";
 
 interface Props {
     height?: number;
+    data?: ChartDataPoint[];
 }
 
-export const FinanceChart: React.FC<Props> = ({ height = 350 }) => {
+export const FinanceChart: React.FC<Props> = ({ height = 350, data = [] }) => {
     return (
         <ResponsiveContainer width="100%" height={height}>
-            <AreaChart data={CHART_DATA}>
+            <AreaChart data={data}>
                 <defs>
                     <linearGradient id="colorIncome" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor="#10b981" stopOpacity={0.8} />
@@ -22,13 +23,13 @@ export const FinanceChart: React.FC<Props> = ({ height = 350 }) => {
                     </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" />
+                <XAxis dataKey="date" />
                 <YAxis />
                 <Tooltip formatter={(value) => formatCurrency(value as number)} />
                 <Legend />
                 <Area
                     type="monotone"
-                    dataKey="income"
+                    dataKey="sales"
                     stroke="#10b981"
                     fillOpacity={1}
                     fill="url(#colorIncome)"
