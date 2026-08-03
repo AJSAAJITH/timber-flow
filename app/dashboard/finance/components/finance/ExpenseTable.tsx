@@ -79,10 +79,10 @@ export const ExpenseTable: React.FC<Props> = ({ expenses, isLoading = false }) =
                                 <TableRow
                                     key={record.id}
                                     className={`border-b border-border hover:bg-secondary/30 transition-colors ${isProfitWithdrawal
-                                            ? "bg-orange-50/50 dark:bg-orange-950/10"
-                                            : isIncome
-                                                ? "bg-emerald-50/30 dark:bg-emerald-950/10"
-                                                : ""
+                                        ? "bg-orange-50/50 dark:bg-orange-950/10"
+                                        : isIncome
+                                            ? "bg-emerald-50/30 dark:bg-emerald-950/10"
+                                            : ""
                                         }`}
                                 >
                                     <TableCell className="text-xs sm:text-sm font-mono text-muted-foreground whitespace-nowrap">
@@ -100,8 +100,8 @@ export const ExpenseTable: React.FC<Props> = ({ expenses, isLoading = false }) =
                                     </TableCell>
                                     <TableCell
                                         className={`text-right text-sm font-bold whitespace-nowrap ${isIncome
-                                                ? "text-emerald-600 dark:text-emerald-400"
-                                                : "text-red-600 dark:text-red-400"
+                                            ? "text-emerald-600 dark:text-emerald-400"
+                                            : "text-red-600 dark:text-red-400"
                                             }`}
                                     >
                                         {isIncome ? "+" : "-"}{formatCurrency(record.amount)}

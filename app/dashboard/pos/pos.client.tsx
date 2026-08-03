@@ -11,7 +11,7 @@ import { createCustomer, getCustomers } from "@/actions/customer.action"
 import { processPosCheckoutAction } from "@/actions/pos-actions"
 import { getCategories } from "@/actions/inventory/category.action"
 
-import { PAYMENT_METHODS } from "./data/posMockData"
+
 import { CartItem, Product, Customer } from "./types/pos.types"
 import { ProductCatalog } from "./components/pos/ProductCatalog"
 import { CartCheckout } from "./components/pos/CartCheckout"
@@ -20,6 +20,7 @@ import { CartCheckout } from "./components/pos/CartCheckout"
 import { CheckoutConfirmationDialog } from "./components/pos/dialogs/CheckoutConfirmationDialog"
 import { NewCustomerDialog } from "./components/pos/dialogs/NewCustomerDialog"
 import { getBranchInventory } from "@/actions/inventory/brach-stock.action"
+import { PAYMENT_METHODS } from "./data/posMockData"
 
 export default function POSClientPage() {
     const { user, selectedBranchId } = useBranch()

@@ -58,8 +58,8 @@ export function CartSummary({
                             key={method}
                             onClick={() => onSelectPayment(method)}
                             className={`px-3 py-2 text-xs font-medium rounded-lg transition-all min-h-[40px] ${selectedPayment === method
-                                    ? "bg-primary text-primary-foreground ring-1 ring-primary"
-                                    : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+                                ? "bg-primary text-primary-foreground ring-1 ring-primary"
+                                : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
                                 }`}
                         >
                             {method}
