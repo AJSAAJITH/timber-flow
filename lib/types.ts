@@ -124,3 +124,30 @@ export interface CatalogProductOption {
     sku: string;
 }
 
+// src/types/dashboard.ts
+
+export interface DashboardMetricStats {
+    todayTotalSales: number;
+    todayInvoiceCount: number;
+    totalPendingDue: number;
+    pendingInvoiceCount: number;
+    todayStockIssuedUnits: number;
+}
+
+export interface DashboardTodaySale {
+    id: string;
+    invoiceNumber: string;
+    time: string;
+    customerName: string;
+    itemsSummary: string;
+    branchName: string;
+    totalAmount: number;
+    paidAmount: number;
+    dueAmount: number;
+    status: "PAID" | "PENDING" | "PARTIALLY_PAID";
+}
+
+export interface DashboardData {
+    stats: DashboardMetricStats;
+    todaySales: DashboardTodaySale[];
+}

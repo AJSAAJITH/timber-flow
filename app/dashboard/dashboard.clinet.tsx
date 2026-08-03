@@ -1,85 +1,80 @@
 // app/dashboard/dashboard.client.tsx
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
-import { useBranch } from "@/lib/branch-context"; // 💡 Branch Context Import කරගන්න
+import { useBranch } from "@/lib/branch-context";
 import { Card } from "@/components/ui/card";
-import { BarChart3, Users, DollarSign, ShoppingCart } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+
+import {
+    DollarSign,
+    Clock,
+    PackageCheck,
+    ArrowUpRight,
+    AlertCircle,
+} from "lucide-react";
+import { DashboardData } from "@/lib/types";
+import { getDashboardMetrics } from "@/actions/dashboard.action";
+
+// Currency Formatting Helper
+const formatLKR = (amount: number) => {
+    return `LKR ${amount.toLocaleString("en-LK", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    })}`;
+};
 
 export default function DashboardPage() {
-    // Global Branch Context එකෙන් Selected Branch එක සහ User ලබා ගනී
     const { user, selectedBranchId, selectedBranchName } = useBranch();
-    const [loading, setLoading] = useState(false);
+    const [data, setData] = useState<DashboardData | null>(null);
+    const [error, setError] = useState<string | null>(null);
+    const [isPending, startTransition] = useTransition();
 
-    // Switcher එකෙන් Branch එක වෙනස් කරන සෑම විටම මේ useEffect එක Run වේ
+    // Selected Branch වෙනස් වන විට Async Data Fetching
     useEffect(() => {
-        async function fetchBranchData() {
-            setLoading(true);
-            try {
-                console.log("Fetching sales & inventory data for Branch ID:", selectedBranchId);
-                // 💡 මෙතැනට පසු පියවරකදී Real Server Action Call එක සම්බන්ධ කරගත හැක
-            } catch (error) {
-                console.error("Error loading dashboard data:", error);
-            } finally {
-                setLoading(false);
-            }
-        }
+        let isMounted = true;
 
-        fetchBranchData();
+        startTransition(async () => {
+            setError(null);
+            const res = await getDashboardMetrics(selectedBranchId);
+
+            if (!isMounted) return;
+
+            if (res.success) {
+                setData(res.data);
+            } else {
+                setError(res.error || "Something went wrong loading data.");
+            }
+        });
+
+        return () => {
+            isMounted = false;
+        };
     }, [selectedBranchId]);
 
+    // UI Stats Dynamic List Mapping
     const stats = [
         {
-            label: "Today's Gross Sales",
-            value: "LKR 184,500",
-            change: "+14.2% from yesterday",
+            label: "Today's Total Sales",
+            value: data ? formatLKR(data.stats.todayTotalSales) : "LKR 0.00",
+            subtext: `${data?.stats.todayInvoiceCount || 0} Invoices generated today`,
             icon: DollarSign,
+            color: "text-emerald-600 dark:text-emerald-400",
         },
         {
-            label: "Active Wood Orders",
-            value: "18 Pending",
-            change: "4 Scheduled for delivery",
-            icon: ShoppingCart,
+            label: "Total Pending Due",
+            value: data ? formatLKR(data.stats.totalPendingDue) : "LKR 0.00",
+            subtext: `${data?.stats.pendingInvoiceCount || 0} Credit / Partial sales pending`,
+            icon: Clock,
+            color: "text-amber-600 dark:text-amber-400",
         },
         {
-            label: "Credit Customers Due",
-            value: "LKR 420,000",
-            change: "12 Customers pending pay",
-            icon: Users,
-        },
-        {
-            label: "Total Stock Available",
-            value: "2,450 Items",
-            change: "5 Items running low",
-            icon: BarChart3,
-        },
-    ];
-
-    const recentTransactions = [
-        {
-            id: "INV-2026-001",
-            item: "Teak Wood Plank (2x4x10)",
-            qty: "50 Pcs",
-            branch: "Main Shop",
-            amount: "LKR 75,000",
-            status: "Paid",
-        },
-        {
-            id: "INV-2026-002",
-            item: "Mahogany Log (Grade A)",
-            qty: "2 Logs",
-            branch: "Galle Branch",
-            amount: "LKR 110,000",
-            status: "Credit",
-        },
-        {
-            id: "INV-2026-003",
-            item: "Plywood Board (3x3 - 6mm)",
-            qty: "20 Sheets",
-            branch: "Main Shop",
-            amount: "LKR 24,000",
-            status: "Paid",
+            label: "Today's Stock Issued",
+            value: `${data?.stats.todayStockIssuedUnits || 0} Units / Pcs`,
+            subtext: "Items deducted from inventory today",
+            icon: PackageCheck,
+            color: "text-blue-600 dark:text-blue-400",
         },
     ];
 
@@ -102,8 +97,16 @@ export default function DashboardPage() {
                 </div>
             </div>
 
-            {/* Stats Cards Grid */}
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {/* Error Message Display */}
+            {error && (
+                <div className="p-4 rounded-lg bg-destructive/15 border border-destructive text-destructive text-sm flex items-center gap-2">
+                    <AlertCircle className="h-4 w-4" />
+                    <span>{error}</span>
+                </div>
+            )}
+
+            {/* Today's Key Performance Indicators (Stats Cards) */}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {stats.map((stat) => {
                     const Icon = stat.icon;
                     return (
@@ -115,14 +118,20 @@ export default function DashboardPage() {
                                 <h3 className="text-sm font-medium text-muted-foreground">
                                     {stat.label}
                                 </h3>
-                                <Icon className="h-5 w-5 text-primary" />
+                                <div className={`p-2 rounded-lg bg-secondary/80 ${stat.color}`}>
+                                    <Icon className="h-5 w-5" />
+                                </div>
                             </div>
                             <div>
-                                <p className="text-xl font-bold text-foreground md:text-2xl">
-                                    {loading ? "..." : stat.value}
-                                </p>
-                                <p className="mt-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">
-                                    {stat.change}
+                                {isPending ? (
+                                    <Skeleton className="h-8 w-3/4 mb-2" />
+                                ) : (
+                                    <p className="text-xl font-bold text-foreground md:text-2xl">
+                                        {stat.value}
+                                    </p>
+                                )}
+                                <p className="mt-1 text-xs font-medium text-muted-foreground">
+                                    {stat.subtext}
                                 </p>
                             </div>
                         </Card>
@@ -132,52 +141,100 @@ export default function DashboardPage() {
 
             {/* Main Content Sections */}
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 items-start">
-                {/* Recent Transactions List */}
-                <Card className="lg:col-span-2 border-border bg-card p-6">
-                    <h2 className="mb-4 text-lg font-semibold text-foreground">
-                        Recent Sales & Orders
-                    </h2>
-                    <div className="space-y-4">
-                        {recentTransactions.map((tx) => (
-                            <div
-                                key={tx.id}
-                                className="flex flex-col sm:flex-row sm:items-center justify-between rounded-lg border border-border p-3.5 hover:bg-accent/50 gap-2"
-                            >
-                                <div>
-                                    <div className="flex items-center gap-2">
-                                        <p className="font-medium text-sm sm:text-base">
-                                            {tx.item}
+                {/* 1. Today Sales List */}
+                <Card className="lg:col-span-2 border-border bg-card p-6 space-y-4">
+                    {/* Fixed Header */}
+                    <div className="flex items-center justify-between border-b border-border pb-4">
+                        <div>
+                            <h2 className="text-lg font-semibold text-foreground">
+                                Today Sales
+                            </h2>
+                            <p className="text-xs text-muted-foreground">
+                                Overview of all invoices created today
+                            </p>
+                        </div>
+                        <Link
+                            href="/dashboard/sales"
+                            className="text-xs font-semibold text-primary hover:underline flex items-center gap-1"
+                        >
+                            View All Sales <ArrowUpRight className="h-3.5 w-3.5" />
+                        </Link>
+                    </div>
+
+                    {/* Scrollable List Container */}
+                    <div className="space-y-3 max-h-[460px] overflow-y-auto pr-1 sm:pr-2">
+                        {isPending ? (
+                            // Skeleton UI for fast loading representation
+                            Array.from({ length: 4 }).map((_, index) => (
+                                <div
+                                    key={index}
+                                    className="p-4 border border-border rounded-lg space-y-2"
+                                >
+                                    <Skeleton className="h-4 w-1/3" />
+                                    <Skeleton className="h-4 w-2/3" />
+                                </div>
+                            ))
+                        ) : data?.todaySales && data.todaySales.length > 0 ? (
+                            data.todaySales.map((tx) => (
+                                <div
+                                    key={tx.id}
+                                    className="flex flex-col sm:flex-row sm:items-center justify-between rounded-lg border border-border p-4 hover:bg-accent/40 transition-colors gap-3"
+                                >
+                                    <div className="space-y-1">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <span className="font-mono text-xs font-bold bg-muted px-2 py-0.5 rounded text-foreground">
+                                                {tx.invoiceNumber}
+                                            </span>
+                                            <span className="text-xs text-muted-foreground">
+                                                {tx.time}
+                                            </span>
+                                            <span className="text-xs text-muted-foreground">•</span>
+                                            <span className="text-xs font-medium text-primary">
+                                                {tx.customerName}
+                                            </span>
+                                        </div>
+                                        <p className="font-medium text-sm text-foreground line-clamp-1">
+                                            {tx.itemsSummary}
                                         </p>
-                                        <span className="text-xs bg-muted px-2 py-0.5 rounded-md font-mono">
-                                            {tx.qty}
-                                        </span>
+                                        <p className="text-xs text-muted-foreground">
+                                            Branch: <span className="text-foreground">{tx.branchName}</span>
+                                        </p>
                                     </div>
-                                    <p className="text-xs text-muted-foreground mt-0.5">
-                                        {tx.id} •{" "}
-                                        <span className="text-primary font-medium">
-                                            {tx.branch}
-                                        </span>
-                                    </p>
+
+                                    <div className="flex flex-col sm:items-end justify-between gap-1 border-t sm:border-t-0 pt-2 sm:pt-0 border-border">
+                                        <p className="font-bold text-sm sm:text-base text-foreground">
+                                            {formatLKR(tx.totalAmount)}
+                                        </p>
+
+                                        <div className="flex items-center gap-2">
+                                            {tx.dueAmount > 0 && (
+                                                <span className="text-xs text-amber-600 dark:text-amber-400 font-medium">
+                                                    Due: {formatLKR(tx.dueAmount)}
+                                                </span>
+                                            )}
+                                            <span
+                                                className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold ${tx.status === "PAID"
+                                                        ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                                                        : tx.status === "PARTIALLY_PAID"
+                                                            ? "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                                                            : "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300"
+                                                    }`}
+                                            >
+                                                {tx.status}
+                                            </span>
+                                        </div>
+                                    </div>
                                 </div>
-                                <div className="text-left sm:text-right">
-                                    <p className="font-semibold text-sm sm:text-base">
-                                        {tx.amount}
-                                    </p>
-                                    <p
-                                        className={`text-xs font-semibold ${tx.status === "Paid"
-                                            ? "text-emerald-600"
-                                            : "text-amber-600"
-                                            }`}
-                                    >
-                                        {tx.status}
-                                    </p>
-                                </div>
+                            ))
+                        ) : (
+                            <div className="py-8 text-center text-xs text-muted-foreground">
+                                No sales recorded today for this branch.
                             </div>
-                        ))}
+                        )}
                     </div>
                 </Card>
 
-                {/* Quick Actions */}
+                {/* 2. Quick Actions */}
                 <Card className="border-border bg-card p-6">
                     <h2 className="mb-4 text-lg font-semibold text-foreground">
                         Quick ERP Actions
@@ -186,7 +243,6 @@ export default function DashboardPage() {
                         {[
                             { label: "New Bill (POS)", href: "/dashboard/pos" },
                             { label: "Add New Stock", href: "/dashboard/inventory" },
-                            { label: "Branch Management", href: "/dashboard/branches" },
                         ].map((action) => (
                             <Link
                                 key={action.label}
