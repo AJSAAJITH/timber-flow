@@ -8,7 +8,77 @@ import prisma from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { Prisma, ExpenseType } from "@prisma/client";
 
-// 1. GET FINANCE DATA (SUMMARY, CHARTS, & EXPENSES)
+/**
+ * 1. Create New Expense Action
+ */
+export async function createExpense(
+    input: CreateExpenseInput
+): Promise<ActionResult<ExpenseRecord>> {
+    try {
+        const user = await getAuthenticatedUser();
+        if (!user) {
+            return actionError("Unauthorized access.", "UNAUTHORIZED");
+        }
+
+        if (!input.amount || input.amount <= 0) {
+            return actionError("Please enter a valid expense amount.", "BAD_REQUEST");
+        }
+
+        if (!input.description?.trim()) {
+            return actionError("Description is required.", "BAD_REQUEST");
+        }
+
+        // Branch Selection & Security Guard
+        let targetBranchId = input.branchId;
+
+        if (user.role !== "SUPER_ADMIN") {
+            if (!user.branch?.id) {
+                return actionError("No assigned branch found for this user.", "FORBIDDEN");
+            }
+            targetBranchId = user.branch.id;
+        }
+
+        if (!targetBranchId || targetBranchId === "ALL") {
+            return actionError("Please select a specific branch to record expense.", "BAD_REQUEST");
+        }
+
+        // Save to Database
+        const newExpense = await prisma.expense.create({
+            data: {
+                amount: input.amount,
+                description: input.description.trim(),
+                type: input.type,
+                branchId: targetBranchId,
+                userId: user.id,
+            },
+            include: {
+                branch: { select: { name: true } },
+                user: { select: { name: true } },
+            },
+        });
+
+        revalidatePath("/dashboard/finance");
+
+        return actionSuccess({
+            id: newExpense.id,
+            amount: Number(newExpense.amount),
+            description: newExpense.description,
+            type: newExpense.type,
+            branchId: newExpense.branchId,
+            branchName: newExpense.branch?.name || "Unknown Branch",
+            userId: newExpense.userId,
+            userName: newExpense.user?.name || "System",
+            createdAt: newExpense.createdAt,
+        });
+    } catch (error) {
+        console.error("Error creating expense:", error);
+        return actionError("Failed to record expense.", "SERVER_ERROR");
+    }
+}
+
+/**
+ * 2. Get Finance Summary & Chart Data Action
+ */
 export async function getFinanceData(
     params: FinanceFilterParams
 ): Promise<ActionResult<FinanceSummaryData>> {
@@ -22,26 +92,20 @@ export async function getFinanceData(
         const limit = params.limit && params.limit > 0 ? params.limit : 10;
         const skip = (page - 1) * limit;
 
-        // ----------------------------------------------------
-        // Role-Based Branch Guard Logic
-        // ----------------------------------------------------
+        // Role-Based Branch Guard
         let targetBranchId: string | undefined = undefined;
-
         if (user.role === "SUPER_ADMIN") {
             if (params.branchId && params.branchId !== "ALL") {
                 targetBranchId = params.branchId;
             }
         } else {
-            // ADMIN / CASHIER: Force user's assigned branch
             if (!user.branch?.id) {
                 return actionError("No assigned branch found for this user.", "FORBIDDEN");
             }
             targetBranchId = user.branch.id;
         }
 
-        // ----------------------------------------------------
-        // Build Base Where Clauses
-        // ----------------------------------------------------
+        // Build Where Clauses
         const expenseWhere: Prisma.ExpenseWhereInput = {};
         const saleWhere: Prisma.SaleWhereInput = {};
         const creditWhere: Prisma.CreditPaymentLogWhereInput = {};
@@ -52,18 +116,13 @@ export async function getFinanceData(
             creditWhere.branchId = targetBranchId;
         }
 
-        // Date Range Filter
         if (params.startDate || params.endDate) {
             const dateFilter: Prisma.DateTimeFilter = {};
             if (params.startDate) {
-                const start = new Date(params.startDate);
-                start.setHours(0, 0, 0, 0);
-                dateFilter.gte = start;
+                dateFilter.gte = new Date(`${params.startDate}T00:00:00.000Z`);
             }
             if (params.endDate) {
-                const end = new Date(params.endDate);
-                end.setHours(23, 59, 59, 999);
-                dateFilter.lte = end;
+                dateFilter.lte = new Date(`${params.endDate}T23:59:59.999Z`);
             }
 
             expenseWhere.createdAt = dateFilter;
@@ -71,22 +130,18 @@ export async function getFinanceData(
             creditWhere.createdAt = dateFilter;
         }
 
-        // Specific Expense Type Filter
         if (params.expenseType && params.expenseType !== "ALL") {
             expenseWhere.type = params.expenseType as ExpenseType;
         }
 
-        // Expense Search Query Filter
-        if (params.searchQuery && params.searchQuery.trim() !== "") {
+        if (params.searchQuery?.trim()) {
             expenseWhere.description = {
                 contains: params.searchQuery.trim(),
                 mode: "insensitive",
             };
         }
 
-        // ----------------------------------------------------
-        // Parallel Database Queries
-        // ----------------------------------------------------
+        // Parallel Database Aggregations
         const [
             expensesList,
             totalExpenseCount,
@@ -94,13 +149,19 @@ export async function getFinanceData(
             expensesAggregate,
             creditAggregate,
             expenseGroupByType,
-            rawSales,
-            rawExpenses
+            dailySalesGroup,
+            dailyExpensesGroup
         ] = await Promise.all([
-            // 1. Paginated Expense List
             prisma.expense.findMany({
                 where: expenseWhere,
-                include: {
+                select: {
+                    id: true,
+                    amount: true,
+                    description: true,
+                    type: true,
+                    branchId: true,
+                    userId: true,
+                    createdAt: true,
                     branch: { select: { name: true } },
                     user: { select: { name: true } },
                 },
@@ -109,79 +170,83 @@ export async function getFinanceData(
                 take: limit,
             }),
 
-            // 2. Total Expense Count for Pagination
             prisma.expense.count({ where: expenseWhere }),
 
-            // 3. Sales Financial Aggregates
             prisma.sale.aggregate({
                 where: saleWhere,
-                _sum: {
-                    totalAmount: true,
-                    paidAmount: true,
-                    dueAmount: true,
-                },
+                _sum: { totalAmount: true, paidAmount: true, dueAmount: true },
             }),
 
-            // 4. Expense Total Aggregate
             prisma.expense.aggregate({
                 where: expenseWhere,
-                _sum: {
-                    amount: true,
-                },
+                _sum: { amount: true },
             }),
 
-            // 5. Credit Payments Collected Aggregate (For tracking/display purposes)
             prisma.creditPaymentLog.aggregate({
                 where: creditWhere,
-                _sum: {
-                    amountPaid: true,
-                },
+                _sum: { amountPaid: true },
             }),
 
-            // 6. Expense Breakdown by Type
             prisma.expense.groupBy({
                 by: ["type"],
                 where: expenseWhere,
-                _sum: {
-                    amount: true,
-                },
+                _sum: { amount: true },
             }),
 
-            // 7. Raw Sales for Charting
-            prisma.sale.findMany({
-                where: saleWhere,
-                select: { createdAt: true, paidAmount: true },
-            }),
+            targetBranchId
+                ? prisma.$queryRaw<Array<{ date: string; total: number }>>`
+                    SELECT DATE("createdAt")::text as date, SUM("paidAmount")::float as total
+                    FROM "Sale"
+                    WHERE "branchId" = ${targetBranchId}
+                    ${params.startDate ? Prisma.sql`AND "createdAt" >= ${new Date(params.startDate)}` : Prisma.empty}
+                    ${params.endDate ? Prisma.sql`AND "createdAt" <= ${new Date(params.endDate + "T23:59:59.999Z")}` : Prisma.empty}
+                    GROUP BY DATE("createdAt")
+                    ORDER BY date ASC;
+                  `
+                : prisma.$queryRaw<Array<{ date: string; total: number }>>`
+                    SELECT DATE("createdAt")::text as date, SUM("paidAmount")::float as total
+                    FROM "Sale"
+                    WHERE 1=1
+                    ${params.startDate ? Prisma.sql`AND "createdAt" >= ${new Date(params.startDate)}` : Prisma.empty}
+                    ${params.endDate ? Prisma.sql`AND "createdAt" <= ${new Date(params.endDate + "T23:59:59.999Z")}` : Prisma.empty}
+                    GROUP BY DATE("createdAt")
+                    ORDER BY date ASC;
+                  `,
 
-            // 8. Raw Expenses for Charting
-            prisma.expense.findMany({
-                where: expenseWhere,
-                select: { createdAt: true, amount: true },
-            })
+            targetBranchId
+                ? prisma.$queryRaw<Array<{ date: string; total: number }>>`
+                    SELECT DATE("createdAt")::text as date, SUM("amount")::float as total
+                    FROM "Expense"
+                    WHERE "branchId" = ${targetBranchId}
+                    ${params.startDate ? Prisma.sql`AND "createdAt" >= ${new Date(params.startDate)}` : Prisma.empty}
+                    ${params.endDate ? Prisma.sql`AND "createdAt" <= ${new Date(params.endDate + "T23:59:59.999Z")}` : Prisma.empty}
+                    GROUP BY DATE("createdAt")
+                    ORDER BY date ASC;
+                  `
+                : prisma.$queryRaw<Array<{ date: string; total: number }>>`
+                    SELECT DATE("createdAt")::text as date, SUM("amount")::float as total
+                    FROM "Expense"
+                    WHERE 1=1
+                    ${params.startDate ? Prisma.sql`AND "createdAt" >= ${new Date(params.startDate)}` : Prisma.empty}
+                    ${params.endDate ? Prisma.sql`AND "createdAt" <= ${new Date(params.endDate + "T23:59:59.999Z")}` : Prisma.empty}
+                    GROUP BY DATE("createdAt")
+                    ORDER BY date ASC;
+                  `
         ]);
 
-        // ----------------------------------------------------
-        // Process & Calculate Correct Financial Metrics
-        // ----------------------------------------------------
-        const totalSales = Number(salesAggregate._sum.totalAmount || 0);          // Gross Invoice Total
-        const totalPaidAtSale = Number(salesAggregate._sum.paidAmount || 0);      // Total Paid Amount managed via Sales
-        const pendingDues = Number(salesAggregate._sum.dueAmount || 0);            // Outstanding uncollected dues
-        const totalCreditCollected = Number(creditAggregate._sum.amountPaid || 0); // Credit payments logged
-        const totalExpenses = Number(expensesAggregate._sum.amount || 0);          // Total Expenses
-
-        // Realized Cash Inflow = Sales Paid Amount (Credit Payment updates sales.paidAmount directly)
+        const totalSales = Number(salesAggregate._sum.totalAmount || 0);
+        const totalPaidAtSale = Number(salesAggregate._sum.paidAmount || 0);
+        const pendingDues = Number(salesAggregate._sum.dueAmount || 0);
+        const totalCreditCollected = Number(creditAggregate._sum.amountPaid || 0);
+        const totalExpenses = Number(expensesAggregate._sum.amount || 0);
         const totalActualIncome = totalPaidAtSale;
-
-        // Net Cashflow = Realized Cash Inflow - Expenses
         const netCashflow = totalActualIncome - totalExpenses;
 
-        // Group Expenses by Type
         const expenseTypeBreakdown: Record<string, number> = {};
         expenseGroupByType.forEach((item) => {
             expenseTypeBreakdown[item.type] = Number(item._sum.amount || 0);
         });
 
-        // Format Expense List
         const formattedExpenses: ExpenseRecord[] = expensesList.map((e) => ({
             id: e.id,
             amount: Number(e.amount),
@@ -194,23 +259,18 @@ export async function getFinanceData(
             createdAt: e.createdAt,
         }));
 
-        // ----------------------------------------------------
-        // Generate Daily Chart Data
-        // ----------------------------------------------------
         const chartMap: Record<string, { sales: number; expenses: number }> = {};
 
-        // 1. Sales Cash In (Includes all paid amounts managed by sales)
-        rawSales.forEach((sale) => {
-            const dateKey = sale.createdAt.toISOString().split("T")[0];
+        dailySalesGroup.forEach((s) => {
+            const dateKey = s.date;
             if (!chartMap[dateKey]) chartMap[dateKey] = { sales: 0, expenses: 0 };
-            chartMap[dateKey].sales += Number(sale.paidAmount || 0);
+            chartMap[dateKey].sales = Number(s.total || 0);
         });
 
-        // 2. Expense Outflow
-        rawExpenses.forEach((exp) => {
-            const dateKey = exp.createdAt.toISOString().split("T")[0];
+        dailyExpensesGroup.forEach((e) => {
+            const dateKey = e.date;
             if (!chartMap[dateKey]) chartMap[dateKey] = { sales: 0, expenses: 0 };
-            chartMap[dateKey].expenses += Number(exp.amount || 0);
+            chartMap[dateKey].expenses = Number(e.total || 0);
         });
 
         const chartData = Object.keys(chartMap)
@@ -243,111 +303,5 @@ export async function getFinanceData(
     } catch (error) {
         console.error("Error fetching finance data:", error);
         return actionError("Failed to load financial records.", "SERVER_ERROR");
-    }
-}
-
-// 2. CREATE EXPENSE ACTION
-export async function createExpense(
-    input: CreateExpenseInput
-): Promise<ActionResult<ExpenseRecord>> {
-    try {
-        const user = await getAuthenticatedUser();
-        if (!user) {
-            return actionError("Unauthorized access.", "UNAUTHORIZED");
-        }
-
-        // Validation
-        if (!input.amount || input.amount <= 0) {
-            return actionError("Amount must be greater than zero.", "VALIDATION_ERROR");
-        }
-        if (!input.description || input.description.trim() === "") {
-            return actionError("Description is required.", "VALIDATION_ERROR");
-        }
-
-        // Determine target branch
-        let resolvedBranchId: string;
-
-        if (user.role === "SUPER_ADMIN") {
-            if (!input.branchId || input.branchId === "ALL") {
-                return actionError("Please select a specific branch to record this expense.", "VALIDATION_ERROR");
-            }
-            resolvedBranchId = input.branchId;
-        } else {
-            if (!user.branch?.id) {
-                return actionError("You do not have an assigned branch to perform this action.", "FORBIDDEN");
-            }
-            resolvedBranchId = user.branch.id;
-        }
-
-        // Create Record
-        const newExpense = await prisma.expense.create({
-            data: {
-                amount: new Prisma.Decimal(input.amount),
-                description: input.description.trim(),
-                type: input.type || ExpenseType.PETTY_CASH,
-                branchId: resolvedBranchId,
-                userId: user.id,
-            },
-            include: {
-                branch: { select: { name: true } },
-                user: { select: { name: true } },
-            },
-        });
-
-        revalidatePath("/dashboard/finance");
-
-        return actionSuccess(
-            {
-                id: newExpense.id,
-                amount: Number(newExpense.amount),
-                description: newExpense.description,
-                type: newExpense.type,
-                branchId: newExpense.branchId,
-                branchName: newExpense.branch?.name || "Branch",
-                userId: newExpense.userId,
-                userName: newExpense.user?.name || user.name,
-                createdAt: newExpense.createdAt,
-            },
-            "Expense recorded successfully."
-        );
-    } catch (error) {
-        console.error("Error creating expense:", error);
-        return actionError("Failed to save expense record.", "SERVER_ERROR");
-    }
-}
-
-// 3. DELETE EXPENSE ACTION
-export async function deleteExpense(
-    expenseId: string
-): Promise<ActionResult<{ success: boolean }>> {
-    try {
-        const user = await getAuthenticatedUser();
-        if (!user) {
-            return actionError("Unauthorized access.", "UNAUTHORIZED");
-        }
-
-        const existingExpense = await prisma.expense.findUnique({
-            where: { id: expenseId },
-        });
-
-        if (!existingExpense) {
-            return actionError("Expense record not found.", "NOT_FOUND");
-        }
-
-        // Branch Security Check for non Super Admin
-        if (user.role !== "SUPER_ADMIN" && existingExpense.branchId !== user.branch?.id) {
-            return actionError("You are not authorized to delete expenses for this branch.", "FORBIDDEN");
-        }
-
-        await prisma.expense.delete({
-            where: { id: expenseId },
-        });
-
-        revalidatePath("/dashboard/finance");
-
-        return actionSuccess({ success: true }, "Expense deleted successfully.");
-    } catch (error) {
-        console.error("Error deleting expense:", error);
-        return actionError("Failed to delete expense.", "SERVER_ERROR");
     }
 }

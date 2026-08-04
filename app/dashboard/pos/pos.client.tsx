@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useMemo, useRef, useEffect } from "react"
+import React, { useState, useMemo, useRef, useEffect, useCallback } from "react"
 import { ShoppingCart, Loader2, Store } from "lucide-react"
 import { toast } from "sonner"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
@@ -10,7 +10,6 @@ import { useBranch } from "@/lib/branch-context"
 import { createCustomer, getCustomers } from "@/actions/customer.action"
 import { processPosCheckoutAction } from "@/actions/pos-actions"
 import { getCategories } from "@/actions/inventory/category.action"
-
 
 import { CartItem, Product, Customer } from "./types/pos.types"
 import { ProductCatalog } from "./components/pos/ProductCatalog"
@@ -49,8 +48,9 @@ export default function POSClientPage() {
     const [isCheckoutDialogOpen, setIsCheckoutDialogOpen] = useState(false)
     const [editingPriceId, setEditingPriceId] = useState<string | null>(null)
     const [editingPrice, setEditingPrice] = useState("")
-    const [newCustomerData, setNewCustomerData] = useState({ name: "", phone: "" })
     const searchInputRef = useRef<HTMLInputElement>(null)
+
+    const [newCustomerData, setNewCustomerData] = useState({ name: "", phone: "" })
 
     // Active Branch එක වෙනස් වන විට (හෝ Load වන විට) Product Stock load කිරීම
     useEffect(() => {
@@ -137,8 +137,11 @@ export default function POSClientPage() {
         return hasItems && hasValidBranch && !isCreditInvalid && !isSubmitting
     }, [cart.length, activeBranchId, selectedPayment, isWalkIn, isSubmitting])
 
-    // Handlers
-    const addToCart = (product: Product) => {
+    // ==========================================
+    // OPTIMIZED HANDLERS (WITH useCallback)
+    // ==========================================
+
+    const addToCart = useCallback((product: Product) => {
         if (product.stock <= 0) {
             toast.error("මෙම අයිතමය Stock එකෙහි නොමැත.")
             return
@@ -167,9 +170,9 @@ export default function POSClientPage() {
                 },
             ]
         })
-    }
+    }, [])
 
-    const updateFinalPrice = (productId: string, newPrice: number) => {
+    const updateFinalPrice = useCallback((productId: string, newPrice: number) => {
         setCart((prev) =>
             prev.map((item) =>
                 item.productId === productId
@@ -181,9 +184,9 @@ export default function POSClientPage() {
                     : item
             )
         )
-    }
+    }, [])
 
-    const updateQuantity = (productId: string, delta: number) => {
+    const updateQuantity = useCallback((productId: string, delta: number) => {
         setCart((prev) => {
             const product = products.find((p) => p.id === productId)
             return prev
@@ -199,14 +202,30 @@ export default function POSClientPage() {
                 })
                 .filter((i): i is CartItem => i !== null)
         })
-    }
+    }, [products])
 
-    const removeFromCart = (productId: string) => {
+    const removeFromCart = useCallback((productId: string) => {
         setCart((prev) => prev.filter((item) => item.productId !== productId))
-    }
+    }, [])
+
+    const handleStartEditPrice = useCallback((id: string, price: number) => {
+        setEditingPriceId(id)
+        setEditingPrice(price.toString())
+    }, [])
+
+    const handleStopEditPrice = useCallback(() => {
+        if (editingPriceId && editingPrice) {
+            const newPrice = parseFloat(editingPrice)
+            if (!isNaN(newPrice) && newPrice > 0) {
+                updateFinalPrice(editingPriceId, newPrice)
+            }
+        }
+        setEditingPriceId(null)
+        setEditingPrice("")
+    }, [editingPriceId, editingPrice, updateFinalPrice])
 
     // Checkout Handler
-    const handleCheckout = async () => {
+    const handleCheckout = useCallback(async () => {
         if (isSubmitting) return
 
         if (!activeBranchId || activeBranchId === "ALL") {
@@ -245,23 +264,36 @@ export default function POSClientPage() {
 
             if (res.success) {
                 toast.success("Order placed successfully!")
+
+                // ⚡ 1. OPTIMISTIC UPDATE: Local State එකේ Stock එක ක්ෂණිකව අඩු කිරීම
+                const cartItemsMap = new Map(cart.map((item) => [item.productId, item.quantity]))
+                setProducts((prevProducts) =>
+                    prevProducts.map((prod) => {
+                        const qtySold = cartItemsMap.get(prod.id)
+                        return qtySold ? { ...prod, stock: prod.stock - qtySold } : prod
+                    })
+                )
+
+                // ⚡ 2. UI එක ක්ෂණිකව Reset කර Dialog එක Close කිරීම
                 setCart([])
                 setIsCheckoutDialogOpen(false)
-
-                // Checkout එකෙන් පසු Stock ප්‍රමාණය යාවත්කාලීන කිරීමට Inventory එක re-fetch කිරීම
-                const inventoryRes = await getBranchInventory(activeBranchId)
-                if (inventoryRes.success && inventoryRes.data) {
-                    setProducts(inventoryRes.data.map((item) => ({
-                        id: item.productId,
-                        name: item.productName,
-                        sku: item.sku || "N/A",
-                        price: item.unitPrice,
-                        category: item.categoryName || "Uncategorized",
-                        stock: item.currentStock,
-                    })))
-                }
-
                 if (window.innerWidth < 1024) setIsCartOpen(false)
+
+                // ⚡ 3. Background Sync (UI එක Block නොකර පසුපසින් Sync වීම)
+                getBranchInventory(activeBranchId).then((inventoryRes) => {
+                    if (inventoryRes.success && inventoryRes.data) {
+                        setProducts(
+                            inventoryRes.data.map((item) => ({
+                                id: item.productId,
+                                name: item.productName,
+                                sku: item.sku || "N/A",
+                                price: item.unitPrice,
+                                category: item.categoryName || "Uncategorized",
+                                stock: item.currentStock,
+                            }))
+                        )
+                    }
+                })
             } else {
                 toast.error(res.error || "Checkout failed. Please try again.")
             }
@@ -271,10 +303,19 @@ export default function POSClientPage() {
         } finally {
             setIsSubmitting(false)
         }
-    }
+    }, [
+        isSubmitting,
+        activeBranchId,
+        selectedPayment,
+        isWalkIn,
+        selectedCustomerId,
+        cart,
+        cartCalculations,
+        user?.id,
+    ])
 
     // Customer Add Handler
-    const handleAddCustomerSubmit = async () => {
+    const handleAddCustomerSubmit = useCallback(async () => {
         if (!newCustomerData.name.trim() || !newCustomerData.phone.trim()) {
             toast.error("Please enter customer name and phone number.")
             return
@@ -302,7 +343,15 @@ export default function POSClientPage() {
             setNewCustomerData({ name: "", phone: "" })
             setIsNewCustomerDialogOpen(false)
         }
-    }
+    }, [newCustomerData])
+
+    const handleOpenCheckoutDialog = useCallback(() => {
+        setIsCheckoutDialogOpen(true)
+    }, [])
+
+    const handleOpenNewCustomerDialog = useCallback(() => {
+        setIsNewCustomerDialogOpen(true)
+    }, [])
 
     if (isLoadingData) {
         return (
@@ -359,25 +408,13 @@ export default function POSClientPage() {
                         onToggleWalkIn={setIsWalkIn}
                         onSelectCustomer={setSelectedCustomerId}
                         onSelectPayment={setSelectedPayment}
-                        onCheckout={() => setIsCheckoutDialogOpen(true)}
-                        onNewCustomer={() => setIsNewCustomerDialogOpen(true)}
+                        onCheckout={handleOpenCheckoutDialog}
+                        onNewCustomer={handleOpenNewCustomerDialog}
                         editingPriceId={editingPriceId}
                         editingPrice={editingPrice}
-                        onStartEditPrice={(id, price) => {
-                            setEditingPriceId(id)
-                            setEditingPrice(price.toString())
-                        }}
+                        onStartEditPrice={handleStartEditPrice}
                         onEditingPriceChange={setEditingPrice}
-                        onStopEditPrice={() => {
-                            if (editingPriceId && editingPrice) {
-                                const newPrice = parseFloat(editingPrice)
-                                if (!isNaN(newPrice) && newPrice > 0) {
-                                    updateFinalPrice(editingPriceId, newPrice)
-                                }
-                            }
-                            setEditingPriceId(null)
-                            setEditingPrice("")
-                        }}
+                        onStopEditPrice={handleStopEditPrice}
                     />
                 </div>
             </div>
@@ -420,25 +457,13 @@ export default function POSClientPage() {
                         onToggleWalkIn={setIsWalkIn}
                         onSelectCustomer={setSelectedCustomerId}
                         onSelectPayment={setSelectedPayment}
-                        onCheckout={() => setIsCheckoutDialogOpen(true)}
-                        onNewCustomer={() => setIsNewCustomerDialogOpen(true)}
+                        onCheckout={handleOpenCheckoutDialog}
+                        onNewCustomer={handleOpenNewCustomerDialog}
                         editingPriceId={editingPriceId}
                         editingPrice={editingPrice}
-                        onStartEditPrice={(id, price) => {
-                            setEditingPriceId(id)
-                            setEditingPrice(price.toString())
-                        }}
+                        onStartEditPrice={handleStartEditPrice}
                         onEditingPriceChange={setEditingPrice}
-                        onStopEditPrice={() => {
-                            if (editingPriceId && editingPrice) {
-                                const newPrice = parseFloat(editingPrice)
-                                if (!isNaN(newPrice) && newPrice > 0) {
-                                    updateFinalPrice(editingPriceId, newPrice)
-                                }
-                            }
-                            setEditingPriceId(null)
-                            setEditingPrice("")
-                        }}
+                        onStopEditPrice={handleStopEditPrice}
                     />
                 </SheetContent>
             </Sheet>

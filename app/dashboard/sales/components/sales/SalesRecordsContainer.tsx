@@ -1,4 +1,3 @@
-// components/sales/SalesRecordsContainer.tsx
 "use client";
 
 import React, { useState, useEffect, useCallback, useTransition } from "react";
@@ -16,8 +15,7 @@ import {
     Eye,
 } from "lucide-react";
 
-import { useBranch } from "@/lib/branch-context"; // Branch Context Path එක නිවැරදිදැයි බලන්න
-
+import { useBranch } from "@/lib/branch-context";
 
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -30,7 +28,7 @@ import {
 } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { SaleDetailSheet } from "./SaleDetailSheet"; // ඔබ ලඟ ඇති Sheet Component එක
+import { SaleDetailSheet } from "./SaleDetailSheet";
 import { CheckoutMethod, PaymentStatus, SaleRecord, SalesSummaryStats } from "../../types/sales.types";
 import { getSalesHistory } from "@/actions/sales.action";
 import { formatCurrency, getPaymentMethodColor, getPaymentStatusColor } from "../../utils/sales-helpers";
@@ -57,6 +55,7 @@ export default function SalesRecordsContainer() {
 
     // Filters State
     const [searchQuery, setSearchQuery] = useState<string>("");
+    const [debouncedSearchQuery, setDebouncedSearchQuery] = useState<string>("");
     const [paymentMethod, setPaymentMethod] = useState<CheckoutMethod | "ALL">("ALL");
     const [paymentStatus, setPaymentStatus] = useState<PaymentStatus | "ALL">("ALL");
     const [startDate, setStartDate] = useState<string>("");
@@ -68,14 +67,25 @@ export default function SalesRecordsContainer() {
     const [copiedInvoice, setCopiedInvoice] = useState<string | null>(null);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-    // Fetch Sales Function
+    // 1. Search Query Debounce Effect (Performance Optimization)
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setDebouncedSearchQuery(searchQuery);
+        }, 400);
+
+        return () => clearTimeout(timer);
+    }, [searchQuery]);
+
+    // 2. Fetch Sales Function with Race Condition Handling
     const fetchSales = useCallback(
         (pageNumber: number = 1) => {
+            let isCurrent = true;
             setErrorMessage(null);
+
             startTransition(async () => {
                 const res = await getSalesHistory({
                     branchId: selectedBranchId,
-                    searchQuery,
+                    searchQuery: debouncedSearchQuery,
                     paymentMethod,
                     paymentStatus,
                     startDate: startDate || undefined,
@@ -84,44 +94,52 @@ export default function SalesRecordsContainer() {
                     limit: 10,
                 });
 
-                if (res.success) {
-                    setSales(res.data);
-                    setStats(res.stats);
-                    setPagination(res.pagination);
-                } else {
-                    setErrorMessage(res.error || "Failed to load sales data.");
+                if (isCurrent) {
+                    if (res.success) {
+                        setSales(res.data);
+                        setStats(res.stats);
+                        setPagination(res.pagination);
+                    } else {
+                        setErrorMessage(res.error || "Failed to load sales data.");
+                    }
                 }
             });
+
+            return () => {
+                isCurrent = false;
+            };
         },
-        [selectedBranchId, searchQuery, paymentMethod, paymentStatus, startDate, endDate]
+        [selectedBranchId, debouncedSearchQuery, paymentMethod, paymentStatus, startDate, endDate]
     );
 
-    // Context හෝ Filters වෙනස්වන විට auto-refetch
+    // 3. Auto-refetch when filters or branch change
     useEffect(() => {
-        fetchSales(1);
+        const cleanup = fetchSales(1);
+        return () => {
+            if (cleanup) cleanup();
+        };
     }, [fetchSales]);
 
-    // Handle Copy Invoice
-    const handleCopyInvoice = (invoiceNumber: string) => {
+    // 4. Memoized Handlers for smooth re-renders
+    const handleCopyInvoice = useCallback((invoiceNumber: string) => {
         navigator.clipboard.writeText(invoiceNumber);
         setCopiedInvoice(invoiceNumber);
         setTimeout(() => setCopiedInvoice(null), 2000);
-    };
+    }, []);
 
-    // Open Details Sheet
-    const handleViewDetails = (sale: SaleRecord) => {
+    const handleViewDetails = useCallback((sale: SaleRecord) => {
         setSelectedSale(sale);
         setIsSheetOpen(true);
-    };
+    }, []);
 
-    // Reset Filters
-    const handleResetFilters = () => {
+    const handleResetFilters = useCallback(() => {
         setSearchQuery("");
+        setDebouncedSearchQuery("");
         setPaymentMethod("ALL");
         setPaymentStatus("ALL");
         setStartDate("");
         setEndDate("");
-    };
+    }, []);
 
     return (
         <div className="space-y-6 p-2 md:p-4">
@@ -410,7 +428,7 @@ export default function SalesRecordsContainer() {
                                         </td>
                                         <td
                                             className="py-3.5 px-4 text-center"
-                                            onClick={(e) => e.stopPropagation()} // Table row click event එක Override කිරීම
+                                            onClick={(e) => e.stopPropagation()}
                                         >
                                             <Button
                                                 variant="ghost"

@@ -1,7 +1,7 @@
 // app/dashboard/dashboard.client.tsx
 "use client";
 
-import React, { useEffect, useState, useTransition } from "react";
+import React, { useEffect, useState, useTransition, useRef } from "react";
 import Link from "next/link";
 import { useBranch } from "@/lib/branch-context";
 import { Card } from "@/components/ui/card";
@@ -17,7 +17,6 @@ import {
 import { DashboardData } from "@/lib/types";
 import { getDashboardMetrics } from "@/actions/dashboard.action";
 
-// Currency Formatting Helper
 const formatLKR = (amount: number) => {
     return `LKR ${amount.toLocaleString("en-LK", {
         minimumFractionDigits: 2,
@@ -25,14 +24,28 @@ const formatLKR = (amount: number) => {
     })}`;
 };
 
-export default function DashboardPage() {
+interface DashboardPageProps {
+    initialData?: DashboardData | null;
+}
+
+export default function DashboardPage({ initialData }: DashboardPageProps) {
     const { user, selectedBranchId, selectedBranchName } = useBranch();
-    const [data, setData] = useState<DashboardData | null>(null);
+    const [data, setData] = useState<DashboardData | null>(initialData || null);
     const [error, setError] = useState<string | null>(null);
     const [isPending, startTransition] = useTransition();
 
-    // Selected Branch වෙනස් වන විට Async Data Fetching
+    // Prevent re-fetching on mount if initial server data exists for "ALL"
+    const isFirstRender = useRef(true);
+
     useEffect(() => {
+        if (isFirstRender.current) {
+            isFirstRender.current = false;
+            // If we already have initialData and selectedBranchId is ALL, skip initial client fetch
+            if (initialData && selectedBranchId === "ALL") {
+                return;
+            }
+        }
+
         let isMounted = true;
 
         startTransition(async () => {
@@ -51,9 +64,8 @@ export default function DashboardPage() {
         return () => {
             isMounted = false;
         };
-    }, [selectedBranchId]);
+    }, [selectedBranchId, initialData]);
 
-    // UI Stats Dynamic List Mapping
     const stats = [
         {
             label: "Today's Total Sales",
@@ -123,7 +135,7 @@ export default function DashboardPage() {
                                 </div>
                             </div>
                             <div>
-                                {isPending ? (
+                                {isPending && !data ? (
                                     <Skeleton className="h-8 w-3/4 mb-2" />
                                 ) : (
                                     <p className="text-xl font-bold text-foreground md:text-2xl">
@@ -163,8 +175,7 @@ export default function DashboardPage() {
 
                     {/* Scrollable List Container */}
                     <div className="space-y-3 max-h-[460px] overflow-y-auto pr-1 sm:pr-2">
-                        {isPending ? (
-                            // Skeleton UI for fast loading representation
+                        {isPending && !data ? (
                             Array.from({ length: 4 }).map((_, index) => (
                                 <div
                                     key={index}

@@ -30,7 +30,7 @@ export interface CheckoutPayload {
     userId: string; // Cashier / Admin ID
 }
 
-// Prisma Decimal එක Plain Number එකකට Convert කරන Helper Function එක (Null-Safe)
+// Helper Function
 function formatCustomer(customer: any) {
     if (!customer) return null;
     return {
@@ -39,41 +39,12 @@ function formatCustomer(customer: any) {
     };
 }
 
-/**
- * 1. Register a new customer
- */
-export async function createCustomerAction(data: CreateCustomerInput): Promise<ActionResult<any>> {
-    try {
-        if (!data.name.trim() || !data.phone.trim()) {
-            return actionError("Customer name and phone number are required.", "VALIDATION_ERROR");
-        }
-
-        const customer = await prisma.customer.create({
-            data: {
-                name: data.name.trim(),
-                phone: data.phone.trim(),
-            },
-        });
-
-        // UPDATE 1: Customer.totalDue Decimal එක Number එකකට Convert කරන ලදී
-        return actionSuccess(formatCustomer(customer), "Customer registered successfully");
-    } catch (error: any) {
-        console.error("Create Customer Error:", error);
-        return actionError(error.message || "Failed to create customer.", "SERVER_ERROR");
-    }
-}
-
-/**
- * 2. Process POS Checkout, Deduct Stock & Record Sale
- */
 export async function processPosCheckoutAction(payload: CheckoutPayload): Promise<ActionResult<any>> {
     try {
-        // Validation 1: Branch context check
         if (!payload.branchId || payload.branchId === "ALL") {
             return actionError("Please select a specific Branch before completing the order.", "VALIDATION_ERROR");
         }
 
-        // Map String Payment Method to Prisma Enum
         let enumPaymentMethod: PaymentMethod = PaymentMethod.CASH;
         const normalizedPayment = payload.paymentMethod.toUpperCase().replace(/\s+/g, '_');
 
@@ -83,43 +54,43 @@ export async function processPosCheckoutAction(payload: CheckoutPayload): Promis
             enumPaymentMethod = PaymentMethod.BANK_TRANSFER;
         }
 
-        // Validation 2: Credit payment restriction for walk-ins
         if (enumPaymentMethod === PaymentMethod.CREDIT && (payload.isWalkIn || !payload.customerId)) {
             return actionError("Credit payment requires a registered customer.", "VALIDATION_ERROR");
         }
 
-        // Calculate Amounts & Status based on Payment Method
         const isCredit = enumPaymentMethod === PaymentMethod.CREDIT;
         const totalAmount = payload.calculations.finalTotal;
         const paidAmount = isCredit ? 0 : totalAmount;
         const dueAmount = isCredit ? totalAmount : 0;
         const paymentStatus = isCredit ? PaymentStatus.PENDING : PaymentStatus.PAID;
 
-        // Transaction with extended maxWait & timeout settings + Batch optimization
+        // Atomic Database Transaction
         const sale = await prisma.$transaction(
             async (tx) => {
-                // A. Single Query to fetch all inventories for items in cart
                 const productIds = payload.items.map((item) => item.productId);
+
+                // 1. Fetch inventories for items in cart
                 const inventories = await tx.branchInventory.findMany({
                     where: {
                         branchId: payload.branchId,
                         productId: { in: productIds },
                     },
+                    select: { productId: true, stockLevel: true } // Performance optimization: select only required fields
                 });
 
                 const inventoryMap = new Map(
-                    inventories.map((inv) => [inv.productId, inv])
+                    inventories.map((inv) => [inv.productId, inv.stockLevel])
                 );
 
-                // B. Validate stock for all items
+                // 2. Validate stock
                 for (const item of payload.items) {
-                    const inventory = inventoryMap.get(item.productId);
-                    if (!inventory || inventory.stockLevel < item.quantity) {
+                    const currentStock = inventoryMap.get(item.productId) ?? 0;
+                    if (currentStock < item.quantity) {
                         throw new Error(`Insufficient stock for product ID: ${item.productId}`);
                     }
                 }
 
-                // C. Parallel updates for stock reduction
+                // 3. Deduct stock concurrently
                 await Promise.all(
                     payload.items.map((item) =>
                         tx.branchInventory.update({
@@ -136,18 +107,16 @@ export async function processPosCheckoutAction(payload: CheckoutPayload): Promis
                     )
                 );
 
-                // D. If Credit Transaction, Update Customer's totalDue
+                // 4. Update Customer totalDue if Credit
                 if (isCredit && payload.customerId) {
                     await tx.customer.update({
                         where: { id: payload.customerId },
-                        data: {
-                            totalDue: { increment: dueAmount },
-                        },
+                        data: { totalDue: { increment: dueAmount } },
                     });
                 }
 
-                // E. Create Sale Record
-                const createdSale = await tx.sale.create({
+                // 5. Create Sale Record
+                return await tx.sale.create({
                     data: {
                         branchId: payload.branchId,
                         userId: payload.userId,
@@ -175,25 +144,19 @@ export async function processPosCheckoutAction(payload: CheckoutPayload): Promis
                         branch: true,
                     },
                 });
-
-                return createdSale;
             },
             {
-                maxWait: 10000,
-                timeout: 20000,
+                maxWait: 5000,
+                timeout: 10000,
             }
         );
 
-        // Revalidate POS page
-        revalidatePath("/dashboard/pos");
 
-        // Prisma Decimal Objects -> Plain JS Numbers වලට Convert කිරීම (Next.js Client Component Serialization සඳහා)
         const formattedSale = {
             ...sale,
             totalAmount: Number(sale.totalAmount),
             paidAmount: Number(sale.paidAmount),
             dueAmount: Number(sale.dueAmount),
-            // UPDATE 2: sale.customer හි ඇති totalDue Decimal එක Convert කරන ලදී
             customer: sale.customer ? formatCustomer(sale.customer) : null,
             items: sale.items.map((item) => ({
                 ...item,

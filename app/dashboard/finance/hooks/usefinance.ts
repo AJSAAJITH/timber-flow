@@ -1,12 +1,78 @@
 "use client";
 
 import { useState, useMemo, useEffect, useCallback } from "react";
-import { ExpenseType, FinanceSummaryData, NewExpenseForm } from "../types/finance";
+import { ExpenseType, NewExpenseForm } from "../types/finance";
 import { useBranch } from "@/lib/branch-context";
 import { createExpense, getFinanceData } from "@/actions/finance.action";
 
+export interface ExpenseRecord {
+    id: string;
+    amount: number;
+    description: string;
+    type: ExpenseType;
+    createdAt: string | Date;
+    branchName?: string;
+    userName?: string;
+    branch?: { name: string };
+    user?: { name: string };
+}
+
+export interface FormattedExpense {
+    id: string;
+    createdAt: string | Date;
+    date: string;
+    time: string;
+    branch: string;
+    branchName: string;
+    authorizedUser: string;
+    userName: string;
+    type: ExpenseType;
+    description: string;
+    amount: number;
+}
+
+export interface ChartDataPoint {
+    date: string;
+    sales: number;
+    expenses: number;
+}
+
+export interface FinanceSummaryData {
+    stats: {
+        totalSales: number;
+        totalActualIncome: number;
+        totalExpenses: number;
+        netCashflow: number;
+        totalCreditCollected: number;
+        pendingDues: number;
+    };
+    expenseTypeBreakdown: Record<string, number>;
+    expenses: ExpenseRecord[];
+    chartData: ChartDataPoint[];
+    pagination: {
+        total: number;
+        page: number;
+        totalPages: number;
+        limit: number;
+    };
+}
+
+const INITIAL_NEW_EXPENSE: NewExpenseForm = {
+    amount: "",
+    description: "",
+    type: ExpenseType.PETTY_CASH,
+};
+
+// Local Timezone එකට අනුකූලව YYYY-MM-DD format කරන Helper Function එක
+const formatLocalDate = (date: Date): string => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+};
+
 export function useFinance() {
-    const { selectedBranchId } = useBranch(); // Global Branch Context
+    const { selectedBranchId } = useBranch();
 
     const [financeData, setFinanceData] = useState<FinanceSummaryData | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
@@ -14,15 +80,8 @@ export function useFinance() {
     const [isRecordExpenseOpen, setIsRecordExpenseOpen] = useState<boolean>(false);
     const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
-    const [newExpense, setNewExpense] = useState<NewExpenseForm>({
-        amount: "",
-        type: ExpenseType.PETTY_CASH,
-        description: "",
-    });
+    const [newExpense, setNewExpense] = useState<NewExpenseForm>(INITIAL_NEW_EXPENSE);
 
-    // ----------------------------------------------------
-    // Timeframe to Date Range Helper
-    // ----------------------------------------------------
     const getDateRange = useCallback((timeframe: string) => {
         const now = new Date();
         const start = new Date();
@@ -31,7 +90,7 @@ export function useFinance() {
             start.setHours(0, 0, 0, 0);
         } else if (timeframe === "This Week") {
             const day = now.getDay();
-            const diff = now.getDate() - day + (day === 0 ? -6 : 1); // Monday
+            const diff = now.getDate() - day + (day === 0 ? -6 : 1);
             start.setDate(diff);
             start.setHours(0, 0, 0, 0);
         } else if (timeframe === "This Month") {
@@ -42,14 +101,11 @@ export function useFinance() {
         }
 
         return {
-            startDate: start.toISOString().split("T")[0],
-            endDate: now.toISOString().split("T")[0],
+            startDate: formatLocalDate(start),
+            endDate: formatLocalDate(now),
         };
     }, []);
 
-    // ----------------------------------------------------
-    // Fetch Data from Server Action
-    // ----------------------------------------------------
     const fetchFinance = useCallback(async () => {
         setLoading(true);
         const { startDate, endDate } = getDateRange(selectedTimeframe);
@@ -73,34 +129,34 @@ export function useFinance() {
         fetchFinance();
     }, [fetchFinance]);
 
-    // ----------------------------------------------------
-    // Transform Expenses for UI
-    // ----------------------------------------------------
-    const filteredExpenses = useMemo(() => {
+    const filteredExpenses = useMemo<FormattedExpense[]>(() => {
         if (!financeData?.expenses) return [];
 
         return financeData.expenses.map((exp) => {
             const dateObj = new Date(exp.createdAt);
+            const branchName = exp.branchName || exp.branch?.name || "Main Branch";
+            const userName = exp.userName || exp.user?.name || "System";
+
             return {
                 id: exp.id,
-                date: dateObj.toISOString().split("T")[0],
+                createdAt: exp.createdAt,
+                date: formatLocalDate(dateObj),
                 time: dateObj.toLocaleTimeString("en-US", {
                     hour: "2-digit",
                     minute: "2-digit",
                     hour12: true,
                 }),
-                branch: exp.branchName,
-                authorizedUser: exp.userName,
+                branch: branchName,
+                branchName: branchName,
+                authorizedUser: userName,
+                userName: userName,
                 type: exp.type,
                 description: exp.description,
                 amount: exp.amount,
             };
         });
-    }, [financeData]);
+    }, [financeData?.expenses]);
 
-    // ----------------------------------------------------
-    // Transform Expense Breakdown by Category
-    // ----------------------------------------------------
     const expenseBreakdown = useMemo(() => {
         if (!financeData?.expenseTypeBreakdown) return [];
 
@@ -110,18 +166,11 @@ export function useFinance() {
             .map(([type, amount]) => {
                 const numAmount = Number(amount || 0);
                 const percentage = totalSpent > 0 ? (numAmount / totalSpent) * 100 : 0;
-                return {
-                    type,
-                    amount: numAmount,
-                    percentage,
-                };
+                return { type, amount: numAmount, percentage };
             })
-            .sort((a, b) => b.amount - a.amount); // Highest expenses first
-    }, [financeData]);
+            .sort((a, b) => b.amount - a.amount);
+    }, [financeData?.expenseTypeBreakdown, financeData?.stats?.totalExpenses]);
 
-    // ----------------------------------------------------
-    // Transform Metrics for UI Summary Cards
-    // ----------------------------------------------------
     const metrics = useMemo(() => {
         if (!financeData?.stats) {
             return {
@@ -142,36 +191,54 @@ export function useFinance() {
             pendingDues: financeData.stats.pendingDues,
             totalCreditCollected: financeData.stats.totalCreditCollected,
         };
-    }, [financeData]);
+    }, [financeData?.stats]);
 
-    // ----------------------------------------------------
-    // Create Expense Handler
-    // ----------------------------------------------------
-    const handleRecordExpense = async () => {
-        if (!newExpense.amount || !newExpense.description || isSubmitting) return;
+    const handleRecordExpense = async (expenseFormData?: NewExpenseForm) => {
+        const isFormObject = expenseFormData && typeof expenseFormData === "object" && "amount" in expenseFormData;
+        const dataToSubmit = isFormObject ? expenseFormData : newExpense;
+
+        const parsedAmount = parseFloat(dataToSubmit.amount);
+        if (!dataToSubmit.amount || isNaN(parsedAmount) || parsedAmount <= 0) {
+            alert("Please enter a valid expense amount.");
+            return;
+        }
+
+        if (!dataToSubmit.description?.trim()) {
+            alert("Please enter a description for the expense.");
+            return;
+        }
+
+        if (selectedBranchId === "ALL") {
+            alert("Please select a specific branch from the header filter to record expenses.");
+            return;
+        }
+
+        if (isSubmitting) return;
 
         setIsSubmitting(true);
 
-        const res = await createExpense({
-            amount: parseFloat(newExpense.amount),
-            description: newExpense.description,
-            type: newExpense.type,
-            branchId: selectedBranchId,
-        });
-
-        if (res.success) {
-            setIsRecordExpenseOpen(false);
-            setNewExpense({
-                amount: "",
-                type: ExpenseType.PETTY_CASH,
-                description: "",
+        try {
+            const res = await createExpense({
+                amount: parsedAmount,
+                description: dataToSubmit.description,
+                type: dataToSubmit.type,
+                branchId: selectedBranchId,
             });
-            await fetchFinance(); // Refresh list & stats
-        } else {
-            alert(res.error || "Failed to record expense");
-        }
 
-        setIsSubmitting(false);
+            if (res.success) {
+                setIsRecordExpenseOpen(false);
+                setNewExpense(INITIAL_NEW_EXPENSE);
+                // Data සාර්ථකව save වූ පසු refetch කරයි
+                await fetchFinance();
+            } else {
+                alert(res.error || "Failed to record expense");
+            }
+        } catch (err) {
+            console.error("Error submitting expense:", err);
+            alert("An error occurred while saving the expense.");
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     return {

@@ -105,7 +105,11 @@ export const RecordExpenseSheet: React.FC<Props> = ({
                     <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
                         Cancel
                     </Button>
-                    <Button onClick={onSubmit} disabled={isSubmitting} className="bg-green-600 hover:bg-green-700">
+                    <Button
+                        onClick={() => onSubmit()}
+                        disabled={isSubmitting}
+                        className="bg-green-600 hover:bg-green-700"
+                    >
                         {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                         Submit Record
                     </Button>

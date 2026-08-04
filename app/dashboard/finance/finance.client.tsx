@@ -109,31 +109,48 @@ export default function FinanceClientPage() {
                                     ) : filteredExpenses.length === 0 ? (
                                         <p className="text-sm text-muted-foreground text-center py-4">No expense logs found.</p>
                                     ) : (
-                                        filteredExpenses.map((expense) => (
-                                            <div key={expense.id} className="rounded-lg border border-border bg-card p-4">
-                                                <div className="flex items-start justify-between gap-3 mb-2">
-                                                    <div className="flex-1 min-w-0">
-                                                        <p className="font-semibold text-foreground truncate">{expense.description}</p>
-                                                        <p className="text-xs text-muted-foreground mt-1">
-                                                            {expense.date} {expense.time}
+                                        filteredExpenses.map((expense) => {
+                                            const createdAtDate = expense.createdAt ? new Date(expense.createdAt) : new Date();
+                                            const formattedDate = createdAtDate.toLocaleDateString("en-US", {
+                                                year: "numeric",
+                                                month: "short",
+                                                day: "numeric",
+                                            });
+                                            const formattedTime = createdAtDate.toLocaleTimeString([], {
+                                                hour: "2-digit",
+                                                minute: "2-digit",
+                                            });
+
+                                            return (
+                                                <div key={expense.id} className="rounded-lg border border-border bg-card p-4">
+                                                    <div className="flex items-start justify-between gap-3 mb-2">
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className="font-semibold text-foreground truncate">{expense.description}</p>
+                                                            <p className="text-xs text-muted-foreground mt-1">
+                                                                {formattedDate} {formattedTime}
+                                                            </p>
+                                                        </div>
+                                                        <span
+                                                            className={`inline-block px-2.5 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${getTypeColor(expense.type)}`}
+                                                        >
+                                                            {EXPENSE_TYPES.find((t) => t.value === expense.type)?.label || expense.type}
+                                                        </span>
+                                                    </div>
+
+                                                    <div className="space-y-1.5 text-sm border-t border-border pt-3">
+                                                        <p className="text-muted-foreground">
+                                                            Branch: {expense.branchName || (expense as any).branch || "Main Branch"}
+                                                        </p>
+                                                        <p className="text-muted-foreground">
+                                                            User: {expense.userName || (expense as any).authorizedUser || "System"}
+                                                        </p>
+                                                        <p className="font-bold text-lg text-red-600 dark:text-red-400">
+                                                            -{formatCurrency(expense.amount)}
                                                         </p>
                                                     </div>
-                                                    <span
-                                                        className={`inline-block px-2.5 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${getTypeColor(expense.type)}`}
-                                                    >
-                                                        {EXPENSE_TYPES.find((t) => t.value === expense.type)?.label || expense.type}
-                                                    </span>
                                                 </div>
-
-                                                <div className="space-y-1.5 text-sm border-t border-border pt-3">
-                                                    <p className="text-muted-foreground">Branch: {expense.branch}</p>
-                                                    <p className="text-muted-foreground">User: {expense.authorizedUser}</p>
-                                                    <p className="font-bold text-lg text-red-600 dark:text-red-400">
-                                                        -{formatCurrency(expense.amount)}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        ))
+                                            );
+                                        })
                                     )}
                                 </div>
                             </TabsContent>
