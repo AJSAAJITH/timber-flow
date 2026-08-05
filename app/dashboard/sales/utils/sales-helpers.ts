@@ -2,6 +2,8 @@
 
 import { CheckoutMethod, PaymentStatus } from "../types/sales.types";
 
+export const PAYMENT_STATUSES = ["ALL", "PAID", "PENDING", "PARTIALLY_PAID"] as const;
+
 export const formatCurrency = (amount: number): string => {
     return new Intl.NumberFormat("en-LK", {
         style: "currency",

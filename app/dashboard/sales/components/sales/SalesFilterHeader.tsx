@@ -5,6 +5,7 @@ import { Search } from "lucide-react"
 import { PAYMENT_STATUSES } from "../../utils/sales-helpers"
 
 
+
 interface SalesFilterHeaderProps {
     selectedStatus: string
     onStatusChange: (status: string) => void

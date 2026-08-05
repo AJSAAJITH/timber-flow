@@ -1,4 +1,3 @@
-// components/inventory/categories-stock-logs/categories-stock-log-view.tsx
 "use client"
 
 import React, { useState } from "react"
@@ -45,8 +44,9 @@ export default function Ctgories_Stock_Logs({
 
         const logEntry: StockLog = {
             id: Date.now().toString(),
+            branchId: (selectedStock as any).branchId || "main-branch", // 💡 branchId එක මෙතැනට එකතු කරන ලදී
             timestamp: new Date().toLocaleString(),
-            branch: selectedStock.branch || "Main Branch", // Safe fallback logic
+            branch: selectedStock.branch || "Main Branch",
             product: selectedStock.productName,
             logType: type === "in" ? "STOCK_IN" : "ADJUSTMENT",
             quantity: type === "in" ? qty : -qty,
