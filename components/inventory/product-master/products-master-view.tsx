@@ -45,14 +45,20 @@ export default function ProductMasterView({ categories }: ProductMasterViewProps
         loadData()
     }, [])
 
-    // Search Filter
+    // Search Filter (Name, SKU, Category Name, and Unit Price)
     const filteredProducts = useMemo(() => {
-        return products.filter(
-            (p) =>
-                p.name.toLowerCase().includes(searchQueryProduct.toLowerCase()) ||
-                (p.sku && p.sku.toLowerCase().includes(searchQueryProduct.toLowerCase()))
-        )
-    }, [searchQueryProduct, products])
+        const query = searchQueryProduct.trim().toLowerCase();
+        if (!query) return products;
+
+        return products.filter((p) => {
+            const nameMatch = p.name.toLowerCase().includes(query);
+            const skuMatch = p.sku ? p.sku.toLowerCase().includes(query) : false;
+            const categoryMatch = p.category?.name ? p.category.name.toLowerCase().includes(query) : false;
+            const priceMatch = p.unitPrice !== undefined && p.unitPrice !== null ? p.unitPrice.toString().includes(query) : false;
+
+            return nameMatch || skuMatch || categoryMatch || priceMatch;
+        });
+    }, [searchQueryProduct, products]);
 
     // Handle Create Action
     const handleCreateProduct = async (data: ProductInput): Promise<boolean> => {
