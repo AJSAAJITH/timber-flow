@@ -49,7 +49,7 @@ export async function getBranches(): Promise<ActionResult<BranchOption[]>> {
 export async function getCatalogProducts(): Promise<ActionResult<CatalogProductOption[]>> {
     try {
         const products = await prisma.product.findMany({
-            select: { id: true, name: true, sku: true },
+            select: { id: true, name: true, sku: true, unitPrice: true },
             orderBy: { name: "asc" },
         });
 
@@ -57,6 +57,7 @@ export async function getCatalogProducts(): Promise<ActionResult<CatalogProductO
             id: p.id,
             name: p.name,
             sku: p.sku ?? "",
+            unitPrice: p.unitPrice ? Number(p.unitPrice) : 0,
         }));
 
         return actionSuccess(formattedProducts);

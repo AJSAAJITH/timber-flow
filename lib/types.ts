@@ -122,6 +122,8 @@ export interface CatalogProductOption {
     id: string;
     name: string;
     sku: string;
+    unitPrice: number;
+
 }
 
 // src/types/dashboard.ts
