@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect, useTransition } from "react";
+import { useState, useEffect, useTransition, useMemo } from "react";
 import { RefreshCw } from "lucide-react";
 import { BranchOption, CatalogProductOption, StockItem } from "@/lib/types";
-import { useBranch } from "@/lib/branch-context"; // 💡 Branch Context එක Import කරන ලදී
+import { useBranch } from "@/lib/branch-context";
 import {
     addStockToBranch,
     adjustStock,
@@ -15,6 +15,7 @@ import DesktopStockTable from "@/components/inventory/branch-stock/desktop-stock
 import { AddStockDialog } from "@/components/inventory/branch-stock/add-stock-dialog";
 import { AdjustStockDialog, InventoryLogType } from "@/components/inventory/branch-stock/adjust-stock-dialog";
 import { AddStockActionHeader } from "@/components/inventory/branch-stock/add-stock-action-header";
+import StockSearchFilter from "@/components/inventory/branch-stock/stock-search-filter"; // 💡 Import Search Filter Component
 
 interface BranchStockViewProps {
     branches: BranchOption[];
@@ -27,11 +28,9 @@ export default function BranchStockView({
     catalogProducts,
     currentUserId,
 }: BranchStockViewProps) {
-    // 💡 BranchContext මගින් User Data ලබාගැනීම
     const { user } = useBranch();
     const isSuperAdmin = user?.role === "SUPER_ADMIN";
 
-    // 💡 SUPER_ADMIN නොවේ නම් User ගේ තමන්ගේ Branch ID එක Default ලෙස set කරයි
     const [selectedBranchId, setSelectedBranchId] = useState<string>(() => {
         if (!isSuperAdmin && user?.branch?.id) {
             return user.branch.id;
@@ -42,6 +41,11 @@ export default function BranchStockView({
     const [stockItems, setStockItems] = useState<StockItem[]>([]);
     const [isPending, startTransition] = useTransition();
     const [message, setMessage] = useState<{ text: string; isError?: boolean } | null>(null);
+
+    // 💡 Search & Filter States
+    const [searchQuery, setSearchQuery] = useState("");
+    const [selectedCategory, setSelectedCategory] = useState("ALL");
+    const [selectedStatus, setSelectedStatus] = useState("ALL");
 
     // Modals state
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -59,14 +63,12 @@ export default function BranchStockView({
         reason: "",
     });
 
-    // 💡 Non-SUPER_ADMIN පරිශීලකයින් සඳහා ඔවුන්ගේ අදාළ Branch ID එක lock කිරීම
     useEffect(() => {
         if (!isSuperAdmin && user?.branch?.id) {
             setSelectedBranchId(user.branch.id);
         }
     }, [isSuperAdmin, user?.branch?.id]);
 
-    // Message එක තත්පර 5කින් auto disappear වන ලෙස සැකසූ useEffect එක
     useEffect(() => {
         if (message) {
             const timer = setTimeout(() => {
@@ -96,8 +98,58 @@ export default function BranchStockView({
     useEffect(() => {
         if (selectedBranchId) {
             fetchInventory(selectedBranchId);
+            // Reset filters when branch changes
+            handleResetFilters();
         }
     }, [selectedBranchId]);
+
+    // 💡 Dynamic Category List Extraction from stockItems
+    const availableCategories = useMemo(() => {
+        const cats = new Set<string>();
+        stockItems.forEach((item) => {
+            if (item.categoryName) cats.add(item.categoryName);
+            else cats.add("General");
+        });
+        return Array.from(cats);
+    }, [stockItems]);
+
+    // 💡 Client-side Filter Logic
+    const filteredStockItems = useMemo(() => {
+        return stockItems.filter((item) => {
+            const query = searchQuery.toLowerCase().trim();
+
+            // 1. Search Query Check (Product Name, SKU, Category)
+            const matchesQuery =
+                !query ||
+                item.productName.toLowerCase().includes(query) ||
+                (item.sku && item.sku.toLowerCase().includes(query)) ||
+                (item.categoryName && item.categoryName.toLowerCase().includes(query));
+
+            // 2. Category Check
+            const catName = item.categoryName || "General";
+            const matchesCategory =
+                selectedCategory === "ALL" || catName === selectedCategory;
+
+            // 3. Status Check
+            const isOutOfStock = item.currentStock <= 0;
+            const isLowStock = !isOutOfStock && item.currentStock <= item.minStock;
+            const isInStock = !isOutOfStock && !isLowStock;
+
+            let matchesStatus = true;
+            if (selectedStatus === "IN_STOCK") matchesStatus = isInStock;
+            else if (selectedStatus === "LOW_STOCK") matchesStatus = isLowStock;
+            else if (selectedStatus === "OUT_OF_STOCK") matchesStatus = isOutOfStock;
+
+            return matchesQuery && matchesCategory && matchesStatus;
+        });
+    }, [stockItems, searchQuery, selectedCategory, selectedStatus]);
+
+    // Reset Filters Handler
+    const handleResetFilters = () => {
+        setSearchQuery("");
+        setSelectedCategory("ALL");
+        setSelectedStatus("ALL");
+    };
 
     // Handle Add Stock Confirmation
     const handleAddStockConfirm = async (data: {
@@ -170,22 +222,34 @@ export default function BranchStockView({
             {message && (
                 <div
                     className={`p-3 rounded-lg text-sm font-medium border transition-all ${message.isError
-                            ? "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/50 dark:text-red-300 dark:border-red-900"
-                            : "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-900"
+                        ? "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/50 dark:text-red-300 dark:border-red-900"
+                        : "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-900"
                         }`}
                 >
                     {message.text}
                 </div>
             )}
 
+            {/* 1. Action Header */}
             <AddStockActionHeader onOpenAddModal={() => setIsAddModalOpen(true)} />
 
-            {/* Branch Selector Bar */}
+            {/* 2. 🔍 SEARCH & FILTER BAR (AddStockActionHeader සහ Branch Selector Bar අතර ස්ථානගත කර ඇත) */}
+            <StockSearchFilter
+                searchQuery={searchQuery}
+                setSearchQuery={setSearchQuery}
+                selectedCategory={selectedCategory}
+                setSelectedCategory={setSelectedCategory}
+                selectedStatus={selectedStatus}
+                setSelectedStatus={setSelectedStatus}
+                categories={availableCategories}
+                onReset={handleResetFilters}
+            />
+
+            {/* 3. Branch Selector Bar */}
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 bg-card p-4 rounded-xl border">
                 <div className="flex items-center gap-3">
                     <label className="text-sm font-medium whitespace-nowrap">Select Branch:</label>
 
-                    {/* 🔴 Select Dropdown - Super Admin නොවන අයට disabled කර ඇත */}
                     <select
                         value={selectedBranchId}
                         onChange={(e) => setSelectedBranchId(e.target.value)}
@@ -209,7 +273,6 @@ export default function BranchStockView({
                     </button>
                 </div>
 
-                {/* 💡 SUPER_ADMIN නොවන විට කුඩා Badge එකක් පෙන්වීමට (Optional UI UX Improvement) */}
                 {!isSuperAdmin && (
                     <span className="text-xs text-muted-foreground bg-muted px-2.5 py-1 rounded-full w-fit">
                         Locked to your assigned branch
@@ -217,9 +280,9 @@ export default function BranchStockView({
                 )}
             </div>
 
-            {/* Stock Table */}
+            {/* Stock Table (Filtered Items ලබා දී ඇත) */}
             <DesktopStockTable
-                items={stockItems}
+                items={filteredStockItems}
                 isLoading={isPending}
                 onAdjustStock={(item) => {
                     setSelectedItemForAdjust(item);
