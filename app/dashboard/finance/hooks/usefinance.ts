@@ -4,6 +4,7 @@ import { useState, useMemo, useEffect, useCallback } from "react";
 import { ExpenseType, NewExpenseForm } from "../types/finance";
 import { useBranch } from "@/lib/branch-context";
 import { createExpense, getFinanceData } from "@/actions/finance.action";
+import { MONTHS } from "../constants/finance";
 
 export interface ExpenseRecord {
     id: string;
@@ -74,56 +75,119 @@ const formatLocalDate = (date: Date): string => {
 export function useFinance() {
     const { selectedBranchId } = useBranch();
 
+    const now = useMemo(() => new Date(), []);
     const [financeData, setFinanceData] = useState<FinanceSummaryData | null>(null);
+    const [overallFinanceData, setOverallFinanceData] = useState<FinanceSummaryData | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
+
     const [selectedTimeframe, setSelectedTimeframe] = useState<string>("This Month");
+    const [selectedMonth, setSelectedMonth] = useState<number>(now.getMonth());
+    const [selectedYear, setSelectedYear] = useState<number>(now.getFullYear());
+
     const [isRecordExpenseOpen, setIsRecordExpenseOpen] = useState<boolean>(false);
     const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
     const [newExpense, setNewExpense] = useState<NewExpenseForm>(INITIAL_NEW_EXPENSE);
 
-    const getDateRange = useCallback((timeframe: string) => {
-        const now = new Date();
-        const start = new Date();
-
-        if (timeframe === "Today") {
-            start.setHours(0, 0, 0, 0);
-        } else if (timeframe === "This Week") {
-            const day = now.getDay();
-            const diff = now.getDate() - day + (day === 0 ? -6 : 1);
-            start.setDate(diff);
-            start.setHours(0, 0, 0, 0);
-        } else if (timeframe === "This Month") {
-            start.setDate(1);
-            start.setHours(0, 0, 0, 0);
-        } else {
-            return { startDate: undefined, endDate: undefined };
-        }
-
-        return {
-            startDate: formatLocalDate(start),
-            endDate: formatLocalDate(now),
-        };
+    // Dynamic Years list generation (Current year down 5 years)
+    const yearsList = useMemo(() => {
+        const currentYr = new Date().getFullYear();
+        return Array.from({ length: 6 }, (_, i) => currentYr - i);
     }, []);
+
+    const getDateRange = useCallback(
+        (timeframe: string, month: number, year: number) => {
+            const currentNow = new Date();
+            const start = new Date();
+            const end = new Date();
+
+            if (timeframe === "Today") {
+                start.setHours(0, 0, 0, 0);
+                end.setHours(23, 59, 59, 999);
+            } else if (timeframe === "This Week") {
+                const day = currentNow.getDay();
+                const diff = currentNow.getDate() - day + (day === 0 ? -6 : 1);
+                start.setDate(diff);
+                start.setHours(0, 0, 0, 0);
+                end.setHours(23, 59, 59, 999);
+            } else if (timeframe === "This Month") {
+                start.setDate(1);
+                start.setHours(0, 0, 0, 0);
+                end.setHours(23, 59, 59, 999);
+            } else if (timeframe === "Last Month") {
+                const lastMonthStart = new Date(currentNow.getFullYear(), currentNow.getMonth() - 1, 1);
+                const lastMonthEnd = new Date(currentNow.getFullYear(), currentNow.getMonth(), 0, 23, 59, 59, 999);
+                start.setTime(lastMonthStart.getTime());
+                end.setTime(lastMonthEnd.getTime());
+            } else if (timeframe === "Specific Month") {
+                const specificStart = new Date(year, month, 1, 0, 0, 0, 0);
+                const specificEnd = new Date(year, month + 1, 0, 23, 59, 59, 999);
+                start.setTime(specificStart.getTime());
+                end.setTime(specificEnd.getTime());
+            } else {
+                return { startDate: undefined, endDate: undefined };
+            }
+
+            return {
+                startDate: formatLocalDate(start),
+                endDate: formatLocalDate(end),
+            };
+        },
+        []
+    );
+
+    const timeframeLabel = useMemo(() => {
+        if (selectedTimeframe === "Specific Month") {
+            const mLabel = MONTHS.find((m) => m.value === selectedMonth)?.label || "";
+            return `${mLabel} ${selectedYear}`;
+        }
+        if (selectedTimeframe === "Last Month") {
+            const prevDate = new Date();
+            prevDate.setMonth(prevDate.getMonth() - 1);
+            const mLabel = MONTHS.find((m) => m.value === prevDate.getMonth())?.label || "";
+            return `Last Month (${mLabel} ${prevDate.getFullYear()})`;
+        }
+        return selectedTimeframe;
+    }, [selectedTimeframe, selectedMonth, selectedYear]);
 
     const fetchFinance = useCallback(async () => {
         setLoading(true);
-        const { startDate, endDate } = getDateRange(selectedTimeframe);
+        const { startDate, endDate } = getDateRange(selectedTimeframe, selectedMonth, selectedYear);
 
-        const res = await getFinanceData({
-            branchId: selectedBranchId,
-            startDate,
-            endDate,
-            limit: 50,
-        });
+        try {
+            // Fetch both filtered data for timeframe AND all-time system data in parallel
+            const [resFiltered, resOverall] = await Promise.all([
+                getFinanceData({
+                    branchId: selectedBranchId,
+                    startDate,
+                    endDate,
+                    limit: 50,
+                }),
+                getFinanceData({
+                    branchId: selectedBranchId,
+                    startDate: undefined,
+                    endDate: undefined,
+                    limit: 1,
+                }),
+            ]);
 
-        if (res.success) {
-            setFinanceData(res.data);
-        } else {
-            console.error("Failed to load finance data:", res.error);
+            if (resFiltered.success) {
+                setFinanceData(resFiltered.data);
+            } else {
+                console.error("Failed to load filtered finance data:", resFiltered.error);
+            }
+
+            if (resOverall.success) {
+                setOverallFinanceData(resOverall.data);
+            } else {
+                console.error("Failed to load overall finance data:", resOverall.error);
+            }
+        } catch (err) {
+            console.error("Error fetching finance data:", err);
+        } finally {
+            setLoading(false);
         }
-        setLoading(false);
-    }, [selectedBranchId, selectedTimeframe, getDateRange]);
+    }, [selectedBranchId, selectedTimeframe, selectedMonth, selectedYear, getDateRange]);
 
     useEffect(() => {
         fetchFinance();
@@ -193,6 +257,22 @@ export function useFinance() {
         };
     }, [financeData?.stats]);
 
+    const overallMetrics = useMemo(() => {
+        if (!overallFinanceData?.stats) {
+            return {
+                totalIncome: 0,
+                totalExpenses: 0,
+                netCashFlow: 0,
+            };
+        }
+
+        return {
+            totalIncome: overallFinanceData.stats.totalActualIncome,
+            totalExpenses: overallFinanceData.stats.totalExpenses,
+            netCashFlow: overallFinanceData.stats.netCashflow,
+        };
+    }, [overallFinanceData?.stats]);
+
     const handleRecordExpense = async (expenseFormData?: NewExpenseForm) => {
         const isFormObject = expenseFormData && typeof expenseFormData === "object" && "amount" in expenseFormData;
         const dataToSubmit = isFormObject ? expenseFormData : newExpense;
@@ -228,7 +308,6 @@ export function useFinance() {
             if (res.success) {
                 setIsRecordExpenseOpen(false);
                 setNewExpense(INITIAL_NEW_EXPENSE);
-                // Data සාර්ථකව save වූ පසු refetch කරයි
                 await fetchFinance();
             } else {
                 alert(res.error || "Failed to record expense");
@@ -245,6 +324,12 @@ export function useFinance() {
         selectedBranch: selectedBranchId,
         selectedTimeframe,
         setSelectedTimeframe,
+        selectedMonth,
+        setSelectedMonth,
+        selectedYear,
+        setSelectedYear,
+        yearsList,
+        timeframeLabel,
         isRecordExpenseOpen,
         setIsRecordExpenseOpen,
         newExpense,
@@ -252,6 +337,7 @@ export function useFinance() {
         filteredExpenses,
         expenseBreakdown,
         metrics,
+        overallMetrics,
         chartData: financeData?.chartData || [],
         loading,
         isSubmitting,
